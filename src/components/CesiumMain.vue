@@ -68,6 +68,17 @@
       @button-click="handleToolbarButtonClick"
     />
 
+    <!-- ⭐ 倾斜摄影面板 -->
+    <ObliquePhotographyPanel
+      v-if="obliquePhotographyPanelVisible"
+      :list="obliquePhotographyList"
+      @toggle="toggleObliquePhotography"
+      @heightOffsetChange="onObliqueHeightOffsetChange"
+      @heightInputChange="onObliqueHeightInputChange"
+      @applyRecommendedOffset="applyRecommendedOffset"
+      @close="handleObliquePhotographyPanelClose"
+    />
+
     <!-- ⭐ TestSfc 组件容器 -->
 
     <!-- 地板高度控制面板 -->
@@ -89,99 +100,6 @@
             <span class="toggle-label">🎛️ 双画布控制面板</span>
             <span class="toggle-hint" title="显示/隐藏右侧控制面板">💡</span>
           </label>
-        </div>
-
-        <!-- 倾斜摄影加载列表 -->
-        <div class="oblique-photography-section">
-          <div class="section-title">📷 倾斜摄影加载</div>
-
-          <!-- ⭐ 推荐偏移值提示（显示在倾斜摄影加载标题下方） -->
-          <template v-for="item in obliquePhotographyList" :key="'recommend-' + item.id">
-            <div v-if="item && item.loaded && item.recommendedOffset !== undefined && item.recommendedOffset !== null" class="recommended-offset-banner">
-              <div class="banner-content">
-                <span class="banner-icon">💡</span>
-                <span class="banner-text">
-                  检测到倾斜摄影地形高度较低
-                  <span class="banner-suggestion">，建议向上偏移 <strong class="highlight">{{ item.recommendedOffset.toFixed(1) }} 米</strong> 以与大坐标模型底部对齐</span>
-                </span>
-                <button
-                  @click="applyRecommendedOffset(item)"
-                  class="apply-recommended-btn-large"
-                  :disabled="Math.abs(item.heightOffset - item.recommendedOffset) < 0.1"
-                >
-                  {{ Math.abs(item.heightOffset - item.recommendedOffset) < 0.1 ? '✓ 已应用' : '应用推荐值' }}
-                </button>
-              </div>
-            </div>
-          </template>
-
-          <!-- 地形高度调整控件 -->
-          <template v-for="item in obliquePhotographyList" :key="'height-' + item.id">
-            <div v-if="item && item.loaded" class="oblique-height-control-panel">
-              <div class="height-control-title">🌏 {{ item.name }} 地形高度调整</div>
-
-              <!-- 当前高度偏移显示 -->
-              <div class="current-height">
-                <span class="label">倾斜摄影地形向上偏移：</span>
-                <span class="value">{{ (item.heightOffset || 0).toFixed(2) }} 米</span>
-                <span class="hint" title="调整倾斜摄影的整体高度，正值向上，负值向下">💡</span>
-              </div>
-
-              <!-- 高度调整滑块 -->
-              <div class="height-control">
-                <label>调整偏移：</label>
-                <input
-                  type="range"
-                  min="-2000"
-                  max="2000"
-                  step="1"
-                  :value="item.heightOffset || 0"
-                  @input="onObliqueHeightOffsetChange(item, $event)"
-                  class="height-slider"
-                />
-                <div class="height-usage-info">
-                  <span>调整后使倾斜摄影与大坐标模型高度对齐</span>
-                </div>
-              </div>
-
-              <!-- 精确输入 -->
-              <div class="height-input">
-                <label>精确设置偏移（米）：</label>
-                <input
-                  type="number"
-                  :value="item.heightOffset || 0"
-                  @change="onObliqueHeightInputChange(item, $event)"
-                  class="number-input"
-                  step="0.1"
-                />
-              </div>
-            </div>
-          </template>
-
-          <!-- 无加载提示 -->
-          <div v-if="obliquePhotographyList && obliquePhotographyList.length > 0 && !obliquePhotographyList.some(i => i && i.loaded)" class="no-loaded-hint">
-            请先加载倾斜摄影数据
-          </div>
-
-          <div class="oblique-list">
-            <template v-for="item in obliquePhotographyList" :key="item && item.id">
-              <div class="oblique-item" v-if="item">
-                <label class="oblique-checkbox">
-                  <input
-                    type="checkbox"
-                    :checked="item.loaded || false"
-                    @change="toggleObliquePhotography(item)"
-                    :disabled="item.loading || false"
-                  />
-                  <span class="oblique-name">{{ item.name || '未知' }}</span>
-                  <span v-if="item.loading" class="loading-indicator">加载中...</span>
-                  <span v-else-if="item.loaded" class="status-indicator loaded">✓</span>
-                  <span v-else class="status-indicator unloaded">○</span>
-                </label>
-                <div class="oblique-url" v-if="item.loaded">{{ item.url }}</div>
-              </div>
-            </template>
-          </div>
         </div>
 
         <!-- ⭐ 高度对齐模式选择 -->
@@ -345,6 +263,7 @@ import * as THREE from 'three';
 // import { HeightAlignmentManager } from '../utils/HeightAlignmentManager.js';
 // import TiandituTerrainProvider from '../utils/TiandituTerrainProvider.js'; // ⚠️ 文件已删除，暂时注释
 import CesiumToolbar from './CesiumToolbar.vue';
+import ObliquePhotographyPanel from './functions/ObliquePhotographyPanel.vue';
 
 export default {
   name: "CesiumMain",
@@ -407,6 +326,8 @@ export default {
       useIIFELoading: true,
       // ⭐ 测试 SFC 组件显示状态
       testSfcVisible: false,
+      // ⭐ 倾斜摄影面板显示状态
+      obliquePhotographyPanelVisible: true,
       sfcDualCanvasVisible: false,  // ⭐ SfcDualCanvas 显示状态
       testSfcApp: null,
       testSfcAppInstance: null,  // Vue 应用实例（用于 unmount）
@@ -507,7 +428,18 @@ export default {
       // 高度对齐模式选择
       alignmentMode: 'terrain',  // 'terrain' | 'model' | 'smart'
       // ⭐ 新增：双画布控制面板显示控制
-      showDualControlPanel: false
+      showDualControlPanel: false,
+      // ⭐ 自注册面板组件注册表
+      registeredPanels: {} // key -> { component, props, visible }
+    };
+  },
+  provide() {
+    return {
+      // 向子组件提供注册方法
+      registerPanelComponent: this.registerPanelComponent,
+      unregisterPanelComponent: this.unregisterPanelComponent,
+      // 提供实例ID
+      instanceId: 1
     };
   },
   computed: {
@@ -559,9 +491,60 @@ export default {
     }
   },
   components: {
-    CesiumToolbar
+    CesiumToolbar,
+    ObliquePhotographyPanel
   },
   methods: {
+    // ==================== 面板自注册方法 ====================
+
+    /**
+     * 注册面板组件（由子组件调用）
+     * @param {string} key - 面板唯一标识
+     * @param {Object} config - 组件配置 { component, props, visible }
+     */
+    registerPanelComponent(key, config) {
+      console.log(`[CesiumMain] 注册面板组件: ${key}`, config);
+
+      this.$set(this.registeredPanels, key, {
+        component: config.component,
+        props: config.props || {},
+        visible: config.visible !== false
+      });
+    },
+
+    /**
+     * 注销面板组件（由子组件调用）
+     * @param {string} key - 面板唯一标识
+     */
+    unregisterPanelComponent(key) {
+      console.log(`[CesiumMain] 注销面板组件: ${key}`);
+
+      if (this.registeredPanels[key]) {
+        this.$delete(this.registeredPanels, key);
+      }
+    },
+
+    /**
+     * 设置面板显示状态
+     * @param {string} key - 面板唯一标识
+     * @param {boolean} visible - 是否可见
+     */
+    setPanelVisible(key, visible) {
+      if (this.registeredPanels[key]) {
+        this.$set(this.registeredPanels[key], 'visible', visible);
+      }
+    },
+
+    /**
+     * 切换面板显示状态
+     * @param {string} key - 面板唯一标识
+     */
+    togglePanel(key) {
+      if (this.registeredPanels[key]) {
+        this.$set(this.registeredPanels[key], 'visible', !this.registeredPanels[key].visible);
+      }
+    },
+
     // ==================== 工具条按钮处理方法 ====================
 
     /**
@@ -908,6 +891,14 @@ export default {
           this.updateDualModelAlignment();
         }
       }
+    },
+
+    /**
+     * 处理倾斜摄影面板关闭
+     */
+    handleObliquePhotographyPanelClose() {
+      this.obliquePhotographyPanelVisible = false;
+      console.log('[HelloWorld] 倾斜摄影面板已关闭');
     },
 
     /**
