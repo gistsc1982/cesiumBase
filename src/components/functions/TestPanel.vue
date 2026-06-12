@@ -4,8 +4,8 @@
     title-icon="🧪"
     :width="320"
     :max-height="'60vh'"
-    initial-x="right"
-    :initial-y="100"
+    :initial-x="initialX"
+    :initial-y="initialY"
     :allow-minimize="true"
     close-event-name="testPanelClose"
     :auto-register="true"
@@ -66,6 +66,17 @@ export default {
   name: 'TestPanel',
   components: {
     FunctionPanelUIBase
+  },
+  props: {
+    // 初始位置配置（由配置文件提供）
+    initialX: {
+      type: [Number, String],
+      default: 'right'  // 默认靠右
+    },
+    initialY: {
+      type: Number,
+      default: 100  // 默认顶部偏移 100px
+    }
   },
   data() {
     return {

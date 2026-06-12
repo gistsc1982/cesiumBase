@@ -1,10 +1,107 @@
 import { Fragment as e, createCommentVNode as t, createElementBlock as n, createElementVNode as r, normalizeClass as i, normalizeStyle as a, openBlock as o, toDisplayString as s, vModelText as c, withDirectives as l } from "vue";
+var u = new class {
+	constructor() {
+		this.isReady = !1, this.listeners = /* @__PURE__ */ new Set(), this.cesiumInstance = null, this.viewerInstance = null, this.checkInterval = null, this.checkAttempts = 0, this.maxAttempts = 50;
+	}
+	init() {
+		if (!(typeof window > "u")) {
+			if (this.checkCesiumReady()) {
+				this.setReady();
+				return;
+			}
+			this.setupGlobalListener(), this.startPolling();
+		}
+	}
+	checkCesiumReady() {
+		if (typeof window > "u") return !1;
+		let e = window.Cesium !== void 0, t = window.__cesiumViewer__ !== void 0;
+		return e && t;
+	}
+	setupGlobalListener() {
+		window.addEventListener("cesium-ready", this.handleCesiumReady), window.addEventListener("cesium-viewer-ready", this.handleViewerReady);
+	}
+	removeGlobalListener() {
+		typeof window > "u" || (window.removeEventListener("cesium-ready", this.handleCesiumReady), window.removeEventListener("cesium-viewer-ready", this.handleViewerReady));
+	}
+	handleCesiumReady = () => {
+		console.log("[CesiumEventManager] 📡 收到 cesium-ready 事件"), this.cesiumInstance = window.Cesium, window.__cesiumViewer__ && this.setReady();
+	};
+	handleViewerReady = () => {
+		console.log("[CesiumEventManager] 📡 收到 cesium-viewer-ready 事件"), this.viewerInstance = window.__cesiumViewer__, window.Cesium && this.setReady();
+	};
+	startPolling() {
+		this.checkInterval ||= (this.checkAttempts = 0, setInterval(() => {
+			this.checkAttempts++, this.checkCesiumReady() ? (this.setReady(), this.stopPolling()) : this.checkAttempts >= this.maxAttempts && (console.warn("[CesiumEventManager] ⏰ Cesium 初始化检查超时"), this.stopPolling());
+		}, 100));
+	}
+	stopPolling() {
+		this.checkInterval &&= (clearInterval(this.checkInterval), null);
+	}
+	setReady() {
+		this.isReady || (this.isReady = !0, this.cesiumInstance = window.Cesium, this.viewerInstance = window.__cesiumViewer__, console.log("[CesiumEventManager] ✅ Cesium 已就绪"), this.stopPolling(), this.notifyListeners(), this.dispatchGlobalEvent());
+	}
+	notifyListeners() {
+		this.listeners.forEach((e) => {
+			try {
+				e(this.cesiumInstance, this.viewerInstance);
+			} catch (e) {
+				console.error("[CesiumEventManager] ❌ 监听器执行失败:", e);
+			}
+		});
+	}
+	dispatchGlobalEvent() {
+		if (typeof window > "u") return;
+		let e = new CustomEvent("cesium-all-ready", { detail: {
+			cesium: this.cesiumInstance,
+			viewer: this.viewerInstance
+		} });
+		window.dispatchEvent(e);
+	}
+	onReady(e) {
+		if (typeof e != "function") return console.warn("[CesiumEventManager] ⚠️ 监听器必须是函数"), () => {};
+		if (this.isReady) try {
+			e(this.cesiumInstance, this.viewerInstance);
+		} catch (e) {
+			console.error("[CesiumEventManager] ❌ 监听器执行失败:", e);
+		}
+		else this.listeners.add(e);
+		return () => {
+			this.listeners.delete(e);
+		};
+	}
+	async ready() {
+		return new Promise((e) => {
+			let t = this.onReady((n, r) => {
+				t(), e({
+					cesium: n,
+					viewer: r
+				});
+			});
+		});
+	}
+	getCesium() {
+		return this.cesiumInstance;
+	}
+	getViewer() {
+		return this.viewerInstance;
+	}
+	reset() {
+		this.isReady = !1, this.cesiumInstance = null, this.viewerInstance = null, this.listeners.clear(), this.stopPolling();
+	}
+	destroy() {
+		this.stopPolling(), this.removeGlobalListener(), this.listeners.clear(), this.isReady = !1, this.cesiumInstance = null, this.viewerInstance = null;
+	}
+}();
+typeof window < "u" && (document.readyState === "loading" ? document.addEventListener("DOMContentLoaded", () => {
+	u.init();
+}) : u.init(), window.__cesiumEventManager__ = u);
+//#endregion
 //#region \0plugin-vue:export-helper
-var u = (e, t) => {
+var d = (e, t) => {
 	let n = e.__vccOpts || e;
 	for (let [e, r] of t) n[e] = r;
 	return n;
-}, d = {
+}, f = {
 	name: "SfcBase",
 	props: { onClose: {
 		type: Function,
@@ -17,20 +114,26 @@ var u = (e, t) => {
 	data() {
 		return {
 			cesiumReady: !1,
-			cesiumCheckInterval: null,
 			componentName: "SfcBase",
-			boundEventHandlers: {}
+			boundEventHandlers: {},
+			cesiumUnsubscribe: null
 		};
 	},
 	methods: {
 		checkCesiumReady() {
 			return typeof window < "u" && window.Cesium !== void 0 && window.__cesiumViewer__ ? (this.cesiumReady = !0, this.$logger?.info?.("[SfcBase] Cesium 已就绪"), !0) : !1;
 		},
-		waitForCesium(e, t = 50, n = 100) {
-			let r = 0;
-			this.cesiumCheckInterval && clearInterval(this.cesiumCheckInterval), this.cesiumCheckInterval = setInterval(() => {
-				r++, this.checkCesiumReady() ? (clearInterval(this.cesiumCheckInterval), this.cesiumCheckInterval = null, e && typeof e == "function" && e()) : r >= t && (clearInterval(this.cesiumCheckInterval), this.cesiumCheckInterval = null, this.$logger?.warn?.(`[${this.componentName}] Cesium 初始化超时`));
-			}, n);
+		waitForCesium(e, t = 5e3) {
+			if (this.cesiumUnsubscribe &&= (this.cesiumUnsubscribe(), null), this.checkCesiumReady()) {
+				e && typeof e == "function" && e();
+				return;
+			}
+			let n = null;
+			t > 0 && (n = setTimeout(() => {
+				this.cesiumUnsubscribe &&= (this.cesiumUnsubscribe(), null), this.$logger?.warn?.(`[${this.componentName}] Cesium 初始化超时 (${t}ms)`);
+			}, t)), this.cesiumUnsubscribe = u.onReady((t, r) => {
+				n &&= (clearTimeout(n), null), this.cesiumReady = !0, this.$logger?.info?.(`[${this.componentName}] Cesium 已就绪（事件驱动）`), e && typeof e == "function" && e(t, r);
+			});
 		},
 		getCesiumViewer() {
 			return this.checkCesiumReady() ? window.__cesiumViewer__ : (this.$logger?.warn?.(`[${this.componentName}] Cesium 未就绪，无法获取 Viewer`), null);
@@ -132,30 +235,30 @@ var u = (e, t) => {
 			};
 		},
 		initCesium(e) {
-			this.$logger = this.createLogger(), this.$logger?.info?.("组件初始化"), this.checkCesiumReady() ? e && e() : (this.$logger?.info?.("等待 Cesium 初始化..."), this.waitForCesium(() => {
-				this.$logger?.info?.("Cesium 已就绪"), e && e();
+			this.$logger = this.createLogger(), this.$logger?.info?.("组件初始化"), this.checkCesiumReady() ? (this.cesiumReady = !0, e && e()) : (this.$logger?.info?.("等待 Cesium 初始化（事件驱动）..."), this.waitForCesium((t, n) => {
+				this.$logger?.info?.("Cesium 已就绪"), e && e(t, n);
 			}));
 		},
 		cleanup() {
-			this.cesiumCheckInterval &&= (clearInterval(this.cesiumCheckInterval), null), this.clearBoundHandlers(), this.$logger?.info?.("资源已清理");
+			this.cesiumUnsubscribe &&= (this.cesiumUnsubscribe(), null), this.clearBoundHandlers(), this.$logger?.info?.("资源已清理");
 		}
 	},
 	mounted() {},
 	beforeUnmount() {
 		this.cleanup();
 	}
-}, f = {
+}, p = {
 	class: "sfc-base",
 	style: { display: "none" }
 };
-function p(i, a, s, c, l, u) {
-	return o(), n(e, null, [t(" 基础组件无界面元素，仅作为逻辑基类 "), r("div", f)], 2112);
+function m(i, a, s, c, l, u) {
+	return o(), n(e, null, [t(" 基础组件无界面元素，仅作为逻辑基类 "), r("div", p)], 2112);
 }
 //#endregion
 //#region src/components/TestSfc.vue
-var m = {
+var h = {
 	name: "TestSfc",
-	mixins: [/* @__PURE__ */ u(d, [["render", p]])],
+	mixins: [/* @__PURE__ */ d(f, [["render", m]])],
 	props: { onClose: {
 		type: Function,
 		default: null
@@ -273,8 +376,8 @@ var m = {
 	beforeUnmount() {
 		this.isDragging && (this.boundOnDrag && document.removeEventListener("mousemove", this.boundOnDrag), this.boundStopDrag && document.removeEventListener("mouseup", this.boundStopDrag)), this.cleanup();
 	}
-}, h = { class: "test-sfc-body" }, g = { class: "location-form" }, _ = { class: "form-group" }, v = { class: "form-group" }, y = { class: "form-group" }, b = { class: "form-group" };
-function x(e, u, d, f, p, m) {
+}, g = { class: "test-sfc-body" }, _ = { class: "location-form" }, v = { class: "form-group" }, y = { class: "form-group" }, b = { class: "form-group" }, x = { class: "form-group" };
+function S(e, u, d, f, p, m) {
 	return o(), n("div", {
 		class: i(["test-sfc-modal", { "is-dragging": p.isDragging }]),
 		style: a({
@@ -289,8 +392,8 @@ function x(e, u, d, f, p, m) {
 	}, [u[7] ||= r("h3", null, "🧪 TestSfc 测试组件", -1), r("button", {
 		onClick: u[0] ||= (...e) => m.handleClose && m.handleClose(...e),
 		class: "close-btn"
-	}, "×")], 34), r("div", h, [r("div", g, [
-		r("div", _, [u[8] ||= r("label", { class: "form-label" }, [r("span", { class: "label-icon" }, "📍"), r("span", null, "经度")], -1), l(r("input", {
+	}, "×")], 34), r("div", g, [r("div", _, [
+		r("div", v, [u[8] ||= r("label", { class: "form-label" }, [r("span", { class: "label-icon" }, "📍"), r("span", null, "经度")], -1), l(r("input", {
 			"onUpdate:modelValue": u[2] ||= (e) => p.longitude = e,
 			type: "number",
 			step: "0.000001",
@@ -304,7 +407,7 @@ function x(e, u, d, f, p, m) {
 			void 0,
 			{ number: !0 }
 		]])]),
-		r("div", v, [u[9] ||= r("label", { class: "form-label" }, [r("span", { class: "label-icon" }, "🌐"), r("span", null, "纬度")], -1), l(r("input", {
+		r("div", y, [u[9] ||= r("label", { class: "form-label" }, [r("span", { class: "label-icon" }, "🌐"), r("span", null, "纬度")], -1), l(r("input", {
 			"onUpdate:modelValue": u[3] ||= (e) => p.latitude = e,
 			type: "number",
 			step: "0.000001",
@@ -318,7 +421,7 @@ function x(e, u, d, f, p, m) {
 			void 0,
 			{ number: !0 }
 		]])]),
-		r("div", y, [u[10] ||= r("label", { class: "form-label" }, [r("span", { class: "label-icon" }, "🔭"), r("span", null, "高度")], -1), l(r("input", {
+		r("div", b, [u[10] ||= r("label", { class: "form-label" }, [r("span", { class: "label-icon" }, "🔭"), r("span", null, "高度")], -1), l(r("input", {
 			"onUpdate:modelValue": u[4] ||= (e) => p.height = e,
 			type: "number",
 			step: "0.1",
@@ -330,7 +433,7 @@ function x(e, u, d, f, p, m) {
 			void 0,
 			{ number: !0 }
 		]])]),
-		r("div", b, [u[11] ||= r("label", { class: "form-label" }, [r("span", { class: "label-icon" }, "⤵"), r("span", null, "俯仰角")], -1), l(r("input", {
+		r("div", x, [u[11] ||= r("label", { class: "form-label" }, [r("span", { class: "label-icon" }, "⤵"), r("span", null, "俯仰角")], -1), l(r("input", {
 			"onUpdate:modelValue": u[5] ||= (e) => p.pitch = e,
 			type: "number",
 			step: "0.1",
@@ -354,6 +457,6 @@ function x(e, u, d, f, p, m) {
 		}, s(p.locateMessage), 3)) : t("v-if", !0)
 	])])], 6);
 }
-var S = /*#__PURE__*/ u(m, [["render", x]]);
+var C = /*#__PURE__*/ d(h, [["render", S]]);
 //#endregion
-export { S as default };
+export { C as default };

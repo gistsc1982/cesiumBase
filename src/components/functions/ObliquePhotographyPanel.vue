@@ -4,8 +4,8 @@
     title-icon="📷"
     :width="380"
     :max-height="'65vh'"
-    initial-x="center"
-    :initial-y="120"
+    :initial-x="initialX"
+    :initial-y="initialY"
     :allow-minimize="true"
     close-event-name="obliquePhotographyPanelClose"
     :auto-register="true"
@@ -94,18 +94,37 @@
     <div class="oblique-list">
       <template v-for="item in obliquePhotographyList" :key="item && item.id">
         <div class="oblique-item" v-if="item">
-          <label class="oblique-checkbox">
-            <input
-              type="checkbox"
-              :checked="item.loaded || false"
-              @change="toggleObliquePhotography(item)"
-              :disabled="item.loading || false"
-            />
-            <span class="oblique-name">{{ item.name || '未知' }}</span>
-            <span v-if="item.loading" class="loading-indicator">加载中...</span>
-            <span v-else-if="item.loaded" class="status-indicator loaded">✓</span>
+          <div class="item-main">
+            <!-- 加载/卸载复选框 -->
+            <label class="oblique-checkbox">
+              <input
+                type="checkbox"
+                :checked="item.loaded || false"
+                @change="toggleObliquePhotography(item)"
+                :disabled="item.loading || false"
+              />
+              <span class="oblique-name">{{ item.name || '未知' }}</span>
+              <span v-if="item.loading" class="loading-indicator">加载中...</span>
+            </label>
+          </div>
+
+          <!-- 操作按钮组 -->
+          <div class="item-actions">
+            <!-- 定位按钮（仅已加载时显示） -->
+            <button
+              v-if="item.loaded && item.tileset"
+              @click="locateToObliquePhotography(item)"
+              class="action-btn locate-btn"
+              type="button"
+              :title="`定位到 ${item.name} 位置`"
+            >
+              📍
+            </button>
+            <!-- 加载状态指示 -->
+            <span v-if="item.loaded" class="status-indicator loaded">✓</span>
             <span v-else class="status-indicator unloaded">○</span>
-          </label>
+          </div>
+
           <div class="oblique-url" v-if="item.loaded">{{ item.url }}</div>
         </div>
       </template>
@@ -130,6 +149,17 @@ export default {
   name: 'ObliquePhotographyPanel',
   components: {
     FunctionPanelUIBase
+  },
+  props: {
+    // 初始位置配置（由配置文件提供）
+    initialX: {
+      type: [Number, String],
+      default: 'center'  // 默认居中
+    },
+    initialY: {
+      type: Number,
+      default: 120  // 默认顶部偏移 120px
+    }
   },
   mixins: [SfcBase],  // 继承 SfcBase 以获得 initCesium、getCesiumViewer 等方法
   inject: {
@@ -433,7 +463,7 @@ export default {
 
           // 从变换矩阵中提取平移部分
           const position = new Cesium.Cartesian3();
-          Cesium.Matrix4.getTranslation(item.initialTransform, position);
+          Cesium.Matrix4.getTranslation(transform, position);
 
           // 检查位置是否有效
           const magnitude = Cesium.Cartesian3.magnitude(position);
@@ -469,6 +499,55 @@ export default {
       console.log(`[${this.componentName}] 🎯 应用推荐偏移值: ${item.name} = ${item.recommendedOffset.toFixed(1)} 米`);
       this.$set(item, 'heightOffset', item.recommendedOffset);
       this.applyObliqueHeightOffset(item);
+    },
+
+    /**
+     * 手动定位到倾斜摄影位置
+     * @param {Object} item - 倾斜摄影项目配置
+     */
+    locateToObliquePhotography(item) {
+      const viewer = this.getCesiumViewer();
+      const Cesium = this.getCesium();
+
+      if (!viewer || !Cesium) {
+        console.error(`[${this.componentName}] ❌ Cesium 未就绪`);
+        return;
+      }
+
+      console.log(`[${this.componentName}] 🎯 手动定位到倾斜摄影: ${item.name}`);
+
+      if (!item.tileset || !item.loaded) {
+        console.warn(`[${this.componentName}] ⚠️ 倾斜摄影未加载，无法定位: ${item.name}`);
+        return;
+      }
+
+      try {
+        if (item.tileset.boundingSphere) {
+          const sphere = item.tileset.boundingSphere;
+          console.log(`[${this.componentName}] 📊 倾斜摄影边界球:`, {
+            中心X: sphere.center.x.toFixed(2),
+            中心Y: sphere.center.y.toFixed(2),
+            中心Z: sphere.center.z.toFixed(2),
+            半径: sphere.radius.toFixed(2) + '米'
+          });
+
+          // 将相机飞行到倾斜摄影位置
+          viewer.camera.flyToBoundingSphere(sphere, {
+            duration: 2,
+            offset: new Cesium.HeadingPitchRange(
+              0,
+              -45,  // 俯仰角
+              sphere.radius * 2.0  // 距离
+            )
+          });
+
+          console.log(`[${this.componentName}] ✅ 相机已定位到倾斜摄影位置: ${item.name}`);
+        } else {
+          console.warn(`[${this.componentName}] ⚠️ 倾斜摄影边界球信息不可用: ${item.name}`);
+        }
+      } catch (error) {
+        console.error(`[${this.componentName}] ❌ 定位到倾斜摄影失败: ${item.name}`, error);
+      }
     }
   }
 };
@@ -682,12 +761,66 @@ export default {
   border-color: rgba(76, 175, 80, 0.2);
 }
 
+.item-main {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+}
+
 .oblique-checkbox {
   display: flex;
   align-items: center;
   gap: 10px;
   cursor: pointer;
   padding: 4px 0;
+  flex: 1;
+  min-width: 0;
+}
+
+.item-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.action-btn {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.05);
+  color: rgba(255, 255, 255, 0.7);
+  border-radius: 6px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+  font-size: 14px;
+  flex-shrink: 0;
+}
+
+.action-btn:hover {
+  background: rgba(76, 175, 80, 0.2);
+  border-color: rgba(76, 175, 80, 0.4);
+  color: #4CAF50;
+  transform: scale(1.1);
+}
+
+.action-btn:active {
+  transform: scale(0.95);
+}
+
+.locate-btn {
+  border-color: rgba(33, 150, 243, 0.3);
+}
+
+.locate-btn:hover {
+  background: rgba(33, 150, 243, 0.2);
+  border-color: rgba(33, 150, 243, 0.5);
+  color: #2196F3;
 }
 
 .oblique-checkbox input[type="checkbox"] {

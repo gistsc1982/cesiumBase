@@ -48,7 +48,7 @@ function log(message, color = 'reset') {
 // ==================== 检测函数 ====================
 
 /**
- * 检查组件是否继承 SfcBase
+ * 检查组件是否继承 SfcBase（直接或间接）
  * @param {string} filePath - 组件文件路径
  * @returns {boolean} 是否继承 SfcBase
  */
@@ -56,16 +56,29 @@ function checkExtendsSfcBase(filePath) {
   try {
     const content = fs.readFileSync(filePath, 'utf-8');
 
-    // 检查是否导入 SfcBase
-    const hasImport = /import\s+SfcBase\s+from\s+['"]\.\/SfcBase\.vue['"]/.test(content);
+    // 检查是否直接导入 SfcBase
+    const hasSfcBaseImport = /import\s+SfcBase\s+from\s+['"]\.\/SfcBase\.vue['"]/.test(content);
 
-    // 检查是否使用 extends
-    const hasExtends = /extends:\s*SfcBase/.test(content);
+    // 检查是否使用 extends SfcBase
+    const hasExtendsSfcBase = /extends:\s*SfcBase/.test(content);
 
-    // 检查是否使用 mixins（另一种继承方式）
-    const hasMixins = /mixins:\s*\[\s*.*SfcBase/.test(content);
+    // 检查是否使用 mixins 包含 SfcBase
+    const hasSfcBaseMixin = /mixins:\s*\[[\s*\{[^}]*SfcBase/.test(content);
 
-    return hasImport && (hasExtends || hasMixins);
+    // 检查是否使用 FunctionPanelUIBase（间接继承 SfcBase）
+    const hasFunctionPanelUIBase = /import\s+FunctionPanelUIBase/.test(content) ||
+                                   /FunctionPanelUIBase.*mixins:.*SfcBase/s.test(content) ||
+                                   /mixins:\s*\[[\s*\{[^}]*FunctionPanelUIBase/.test(content);
+
+    // 检查是否使用其他可能继承 SfcBase 的基础组件
+    const hasOtherBaseComponent = /import.*from.*\/(SfcBase|CesiumBase|functionPanelUIBase)\.vue/.test(content);
+
+    // 支持直接继承和间接继承：
+    // 1. 直接继承：导入 SfcBase 并通过 extends/mixins 使用
+    // 2. 间接继承：使用 FunctionPanelUIBase 或其他中间基类
+    return (hasSfcBaseImport && (hasExtendsSfcBase || hasSfcBaseMixin)) ||
+           hasFunctionPanelUIBase ||
+           (hasOtherBaseComponent && !hasSfcBaseImport);
   } catch (error) {
     log(`   ⚠️ 无法读取文件 ${filePath}: ${error.message}`, 'yellow');
     return false;
@@ -161,7 +174,7 @@ async function buildComponent(component) {
         outDir: path.resolve(CONFIG.rootDir, CONFIG.outDir),
         emptyOutDir: false, // 不清空输出目录
         lib: {
-          entry: path.resolve(CONFIG.rootDir, component.entry),
+          entry: path.resolve(CONFIG.rootDir, CONFIG.srcDir, component.entry),
           name: component.name,
           fileName: (format) => `${component.name}.${format === 'es' ? 'mjs' : 'umd.js'}`,
           formats: ['es', 'umd']

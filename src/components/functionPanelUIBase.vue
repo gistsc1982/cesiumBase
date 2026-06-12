@@ -6,7 +6,8 @@
         class="function-panel"
         :class="{
           'is-dragging': isDragging,
-          'is-minimized': isMinimized
+          'is-minimized': isMinimized,
+          'blur-enabled': enableBackdropFilter && enableBlur
         }"
         :style="panelStyles"
         ref="panelRef"
@@ -94,6 +95,20 @@ export default {
     unregisterPanelComponent: {
       type: Function,
       default: null
+    },
+    // 父组件提供的获取已注册面板的方法（可选）
+    getRegisteredPanels: {
+      type: Function,
+      default: null
+    },
+    // ⭐ 获取当前实例ID的函数（多实例支持）
+    getInstanceId: {
+      type: Function,
+      default: () => 1
+    },
+    // ⭐ 覆盖 SfcBase 的 instanceId inject，避免与 computed 冲突
+    instanceId: {
+      default: 1
     }
   },
   props: {
@@ -110,7 +125,11 @@ export default {
     initialY: { type: Number, default: 80 },
     bodyPadding: { type: String, default: '20px' },
     allowMinimize: { type: Boolean, default: true },
-    closeEventName: { type: String, default: 'functionPanelClose' }
+    closeEventName: { type: String, default: 'functionPanelClose' },
+    // 性能优化相关配置
+    enableBlur: { type: Boolean, default: false }, // 默认禁用模糊效果
+    blurAmount: { type: String, default: '8px' }, // 降低默认模糊值
+    enableBackdropFilter: { type: Boolean, default: false } // 是否启用 backdrop-filter（性能敏感）
   },
   data() {
     return {
@@ -129,7 +148,10 @@ export default {
       isClosed: false,
       // 事件处理器引用
       boundMouseMove: null,
-      boundMouseUp: null
+      boundMouseUp: null,
+      // 性能优化：缓存面板尺寸
+      cachedPanelWidth: null,
+      cachedPanelHeight: null
     };
   },
   computed: {
@@ -187,6 +209,21 @@ export default {
   },
   methods: {
     /**
+     * 获取实例特定的配置
+     * @returns {Object|null} 实例配置
+     */
+    getInstanceConfig() {
+      // 从多实例配置管理器获取实例特定的配置
+      if (typeof window !== 'undefined' && window.__multiInstancePanelConfigManager__) {
+        return window.__multiInstancePanelConfigManager__.getPanelConfig(
+          this.instanceId,
+          this.registrationKey
+        );
+      }
+      return null;
+    },
+
+    /**
      * 注册到父组件（自注册方法）
      */
     registerToParent() {
@@ -197,13 +234,25 @@ export default {
 
       // 方式1: 通过 inject 的注册方法（优先）
       if (this.registerPanelComponent && typeof this.registerPanelComponent === 'function') {
+        // ⭐ 获取实例特定的配置
+        const instanceConfig = this.getInstanceConfig();
+
+        // 合并props：实例配置优先，然后是组件自身的props
+        const mergedProps = {
+          ...this.$props,
+          ...(instanceConfig?.position || {})
+        };
+
+        // 使用实例配置的可见性，如果没有则默认为true
+        const visible = instanceConfig ? instanceConfig.visible : true;
+
         this.registerPanelComponent(this.registrationKey, {
           component: this,
-          props: this.$props,
-          visible: true
+          props: mergedProps,
+          visible: visible
         });
         this._registryRegistered = true;
-        console.log(`[FunctionPanelUIBase] ${this.registrationKey} 已通过 inject 注册`);
+        console.log(`[FunctionPanelUIBase #${this.instanceId}] ${this.registrationKey} 已注册, visible: ${visible}, position:`, mergedProps);
         return;
       }
 
@@ -214,7 +263,7 @@ export default {
         props: this.$props
       });
       this._registryRegistered = true;
-      console.log(`[FunctionPanelUIBase] ${this.registrationKey} 已通过事件注册`);
+      console.log(`[FunctionPanelUIBase #${this.instanceId}] ${this.registrationKey} 已通过事件注册`);
     },
 
     /**
@@ -293,6 +342,10 @@ export default {
       this.dragOffsetX = event.clientX - rect.left;
       this.dragOffsetY = event.clientY - rect.top;
 
+      // 性能优化：缓存面板尺寸
+      this.cachedPanelWidth = rect.width;
+      this.cachedPanelHeight = rect.height;
+
       // 绑定拖动事件
       this.boundMouseMove = this.onMouseMove.bind(this);
       this.boundHandleMouseUp = this.onMouseUp.bind(this);
@@ -316,9 +369,9 @@ export default {
       let newY = event.clientY - this.dragOffsetY;
 
       // 边界限制 - 保持至少部分可见
-      const panel = this.$refs.panelRef;
-      const panelWidth = panel ? panel.offsetWidth : this.width;
-      const panelHeight = panel ? panel.offsetHeight : 200;
+      // 性能优化：使用缓存的尺寸，避免频繁 DOM 查询
+      const panelWidth = this.cachedPanelWidth || this.width;
+      const panelHeight = this.cachedPanelHeight || 200;
       const minVisible = 40; // 至少保留40像素可见
 
       // X 方向边界
@@ -368,6 +421,7 @@ export default {
       const panel = this.$refs.panelRef;
       if (!panel) return;
 
+      // 性能优化：使用缓存的尺寸
       const rect = panel.getBoundingClientRect();
       let snapped = false;
 
@@ -378,7 +432,7 @@ export default {
       }
       // 右边缘
       else if (Math.abs(rect.right - window.innerWidth) < threshold) {
-        this.x = window.innerWidth - rect.width;
+        this.x = window.innerWidth - (this.cachedPanelWidth || rect.width);
         snapped = true;
       }
       // 顶部边缘
@@ -396,6 +450,10 @@ export default {
           }, 300);
         }, 0);
       }
+
+      // 清除缓存
+      this.cachedPanelWidth = null;
+      this.cachedPanelHeight = null;
     },
 
     /**
@@ -447,21 +505,28 @@ export default {
   position: fixed;
   top: 0;
   left: 0;
-  background: rgba(15, 15, 20, 0.92);
-  backdrop-filter: blur(24px) saturate(180%);
-  -webkit-backdrop-filter: blur(24px) saturate(180%);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  /* 优化：使用更高效的纯色背景，避免 backdrop-filter 性能消耗 */
+  background: rgba(20, 20, 25, 0.95);
+  border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 16px;
+  /* 优化：简化阴影层数，减少 GPU 负担 */
   box-shadow:
-    0 0 0 1px rgba(255, 255, 255, 0.05) inset,
-    0 1px 2px rgba(0, 0, 0, 0.4) inset,
-    0 20px 60px rgba(0, 0, 0, 0.5),
-    0 0 100px rgba(0, 0, 0, 0.2);
+    0 4px 16px rgba(0, 0, 0, 0.4),
+    0 0 40px rgba(0, 0, 0, 0.2);
   z-index: 100000;
   overflow: hidden;
   display: flex;
   flex-direction: column;
   will-change: transform;
+  /* 优化：移除硬件加速以减少合成层创建 */
+  /* will-change: transform; */
+}
+
+/* 仅在启用 backdrop-filter 时应用（可选） */
+.function-panel.blur-enabled {
+  background: rgba(15, 15, 20, 0.85);
+  backdrop-filter: blur(8px) saturate(120%);
+  -webkit-backdrop-filter: blur(8px) saturate(120%);
 }
 
 .function-panel.is-dragging {
@@ -485,7 +550,8 @@ export default {
   justify-content: space-between;
   height: 52px;
   padding: 0 16px;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0.02) 100%);
+  /* 优化：使用纯色背景替代渐变，减少渲染开销 */
+  background: rgba(255, 255, 255, 0.04);
   border-bottom: 1px solid rgba(255, 255, 255, 0.06);
   cursor: grab;
   user-select: none;
@@ -595,7 +661,8 @@ export default {
   flex: 1;
   overflow-y: auto;
   overflow-x: hidden;
-  background: linear-gradient(180deg, rgba(0, 0, 0, 0.2) 0%, rgba(0, 0, 0, 0.35) 100%);
+  /* 优化：使用纯色背景替代渐变 */
+  background: rgba(0, 0, 0, 0.25);
 }
 
 .panel-body::-webkit-scrollbar {
@@ -625,11 +692,12 @@ export default {
   align-items: center;
   gap: 8px;
   padding: 10px 16px;
-  background: rgba(15, 15, 20, 0.95);
-  backdrop-filter: blur(20px);
+  /* 优化：使用纯色背景替代 backdrop-filter */
+  background: rgba(20, 20, 25, 0.95);
   border: 1px solid rgba(76, 175, 80, 0.5);
   border-radius: 50px;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4), 0 0 20px rgba(76, 175, 80, 0.2);
+  /* 优化：简化阴影 */
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3), 0 0 12px rgba(76, 175, 80, 0.15);
   color: rgba(255, 255, 255, 0.9);
   font-size: 13px;
   font-weight: 500;

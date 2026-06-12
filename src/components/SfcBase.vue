@@ -8,7 +8,7 @@
  * SfcBase - 动态加载组件的基础类
  *
  * 功能：
- * - 提供 Cesium 就绪检查和等待机制
+ * - 提供 Cesium 就绪检查和等待机制（事件驱动）
  * - 提供通用的工具方法（坐标验证、消息显示等）
  * - 提供基础事件处理框架
  * - 不包含任何界面元素（按钮、输入框等）
@@ -16,6 +16,8 @@
  * 使用方式：
  * 在子组件中通过 mixins 或 extends 继承
  */
+import cesiumEventManager from '../utils/CesiumEventManager.js';
+
 export default {
   name: 'SfcBase',
   props: {
@@ -36,11 +38,12 @@ export default {
     return {
       // Cesium 相关状态
       cesiumReady: false,
-      cesiumCheckInterval: null,
       // 通用状态
       componentName: 'SfcBase',
       // 事件绑定存储
-      boundEventHandlers: {}
+      boundEventHandlers: {},
+      // Cesium 事件监听器取消函数
+      cesiumUnsubscribe: null
     };
   },
   methods: {
@@ -62,34 +65,52 @@ export default {
     },
 
     /**
-     * 等待 Cesium 初始化完成
+     * 等待 Cesium 初始化完成（事件驱动方式）
      * @param {Function} callback - Cesium 就绪后的回调
-     * @param {number} maxAttempts - 最大尝试次数（默认50次，每次100ms）
-     * @param {number} interval - 检查间隔（毫秒，默认100ms）
+     * @param {number} timeout - 超时时间（毫秒，默认5000ms）
      */
-    waitForCesium(callback, maxAttempts = 50, interval = 100) {
-      let attempts = 0;
-
-      // 清除之前的定时器
-      if (this.cesiumCheckInterval) {
-        clearInterval(this.cesiumCheckInterval);
+    waitForCesium(callback, timeout = 5000) {
+      // 取消之前的监听
+      if (this.cesiumUnsubscribe) {
+        this.cesiumUnsubscribe();
+        this.cesiumUnsubscribe = null;
       }
 
-      this.cesiumCheckInterval = setInterval(() => {
-        attempts++;
-
-        if (this.checkCesiumReady()) {
-          clearInterval(this.cesiumCheckInterval);
-          this.cesiumCheckInterval = null;
-          if (callback && typeof callback === 'function') {
-            callback();
-          }
-        } else if (attempts >= maxAttempts) {
-          clearInterval(this.cesiumCheckInterval);
-          this.cesiumCheckInterval = null;
-          this.$logger?.warn?.(`[${this.componentName}] Cesium 初始化超时`);
+      // 如果已经就绪，立即执行回调
+      if (this.checkCesiumReady()) {
+        if (callback && typeof callback === 'function') {
+          callback();
         }
-      }, interval);
+        return;
+      }
+
+      // 设置超时
+      let timeoutId = null;
+      if (timeout > 0) {
+        timeoutId = setTimeout(() => {
+          if (this.cesiumUnsubscribe) {
+            this.cesiumUnsubscribe();
+            this.cesiumUnsubscribe = null;
+          }
+          this.$logger?.warn?.(`[${this.componentName}] Cesium 初始化超时 (${timeout}ms)`);
+        }, timeout);
+      }
+
+      // 使用事件管理器监听就绪事件
+      this.cesiumUnsubscribe = cesiumEventManager.onReady((cesium, viewer) => {
+        // 清除超时
+        if (timeoutId) {
+          clearTimeout(timeoutId);
+          timeoutId = null;
+        }
+
+        this.cesiumReady = true;
+        this.$logger?.info?.(`[${this.componentName}] Cesium 已就绪（事件驱动）`);
+
+        if (callback && typeof callback === 'function') {
+          callback(cesium, viewer);
+        }
+      });
     },
 
     /**
@@ -335,12 +356,13 @@ export default {
       this.$logger?.info?.('组件初始化');
 
       if (this.checkCesiumReady()) {
+        this.cesiumReady = true;
         if (onReady) onReady();
       } else {
-        this.$logger?.info?.('等待 Cesium 初始化...');
-        this.waitForCesium(() => {
+        this.$logger?.info?.('等待 Cesium 初始化（事件驱动）...');
+        this.waitForCesium((cesium, viewer) => {
           this.$logger?.info?.('Cesium 已就绪');
-          if (onReady) onReady();
+          if (onReady) onReady(cesium, viewer);
         });
       }
     },
@@ -349,10 +371,10 @@ export default {
      * 清理资源（在 beforeUnmount 中调用）
      */
     cleanup() {
-      // 清除 Cesium 检查定时器
-      if (this.cesiumCheckInterval) {
-        clearInterval(this.cesiumCheckInterval);
-        this.cesiumCheckInterval = null;
+      // 取消 Cesium 事件监听
+      if (this.cesiumUnsubscribe) {
+        this.cesiumUnsubscribe();
+        this.cesiumUnsubscribe = null;
       }
 
       // 清除事件处理器绑定
