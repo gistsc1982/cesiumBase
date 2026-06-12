@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="0">
+  <title>DualCanvasViewer Plugin - 打包版本</title>
+  <link rel="stylesheet" href="./style.css">
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+      background: transparent;
+      color: #eee;
+    }
+    #app {
+      width: 100vw;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+    .header {
+      padding: 10px 20px;
+      background: #16213e;
+      border-bottom: 1px solid #0f3460;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .header h1 {
+      font-size: 18px;
+      font-weight: 500;
+    }
+    .header .status {
+      font-size: 12px;
+      color: #4ade80;
+    }
+    .viewer-container {
+      flex: 1;
+      position: relative;
+      overflow: hidden;
+    }
+  </style>
+</head>
+<body>
+  <!-- 浏览器环境 polyfill -->
+  <script>
+    window.process = { env: {} };
+    window.global = window.globalThis = window;
+  </script>
+
+  <!-- Vue 3 (生产版本 - 本地) -->
+  <script src="./vue.global.prod.js"></script>
+
+  <!-- xeokit SDK 包装脚本 (作为模块加载) -->
+  <script src="./load-xeokit.js" type="module"></script>
+
+  <!-- 打包后的组件 -->
+  <script src="./dual-canvas-viewer-plugin.iife.js"></script>
+
+  <div id="app">
+    <div class="header">
+      <h1>DualCanvasViewer Plugin - 打包版本</h1>
+      <span class="status" v-if="loaded">✓ 组件已加载</span>
+    </div>
+    <div class="viewer-container">
+      <!-- 直接渲染组件 -->
+      <dual-canvas-viewer-plugin></dual-canvas-viewer-plugin>
+    </div>
+  </div>
+
+  <script>
+    const { createApp } = Vue;
+
+    const app = createApp({
+      data() {
+        return {
+          loaded: true
+        };
+      }
+    });
+
+    // 注册组件
+    if (window.DualCanvasViewerPlugin) {
+      app.component('dual-canvas-viewer-plugin', window.DualCanvasViewerPlugin);
+      console.log('[App] ✓ 组件已注册');
+    } else {
+      console.error('[App] ✗ DualCanvasViewerPlugin 未找到');
+    }
+
+    // 等待 xeokit SDK 加载完成后再挂载 app
+    function mountApp() {
+      console.log('[App] 挂载 Vue app，xeokitSDK:', typeof window.xeokitSDK);
+      app.mount('#app');
+    }
+
+    // 检查 xeokit 是否已加载
+    if (window.xeokitSDK) {
+      mountApp();
+    } else {
+      // 等待 xeokit-ready 事件
+      window.addEventListener('xeokit-ready', () => {
+        mountApp();
+      });
+      // 设置超时，如果 3 秒后还没加载则继续（可能不需要 xeokit）
+      setTimeout(() => {
+        if (!document.getElementById('app').__vue_app__) {
+          console.warn('[App] xeokit SDK 加载超时，继续挂载 app');
+          mountApp();
+        }
+      }, 3000);
+    }
+  </script>
+</body>
+</html>

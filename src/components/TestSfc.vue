@@ -90,8 +90,11 @@
 </template>
 
 <script>
+import SfcBase from './SfcBase.vue';
+
 export default {
   name: 'TestSfc',
+  extends: SfcBase,
   props: {
     onClose: {
       type: Function,
@@ -100,7 +103,7 @@ export default {
   },
   inject: {
     closeEventName: {
-      default: 'testSfcClose'  // 默认值，用于向后兼容
+      default: 'testSfcClose'
     },
     instanceId: {
       default: 1
@@ -108,6 +111,8 @@ export default {
   },
   data() {
     return {
+      // 组件名称（用于日志）
+      componentName: 'TestSfc',
       // 经纬度定位数据
       longitude: 0,
       latitude: 0,
@@ -115,7 +120,6 @@ export default {
       pitch: -45,
       locateMessage: '',
       messageType: 'info',
-      cesiumReady: false,
       // 拖动相关 - 初始位置在右侧
       position: { x: 'auto', y: 0 },
       right: 20,
@@ -128,119 +132,109 @@ export default {
     };
   },
   methods: {
+    // ==================== TestSfc 特有方法 ====================
+
+    /**
+     * 执行定位操作
+     */
+    executeLocate() {
+      // 再次检查 Cesium 是否就绪
+      if (!this.checkCesiumReady()) {
+        this.showMessage('Cesium 未就绪，无法定位', 'error');
+        return;
+      }
+
+      this.showMessage('正在定位...', 'info');
+
+      // 使用基类的 flyToPosition 方法
+      this.flyToPosition(
+        this.longitude,
+        this.latitude,
+        this.height,
+        {
+          heading: 0,
+          pitch: Cesium.Math.toRadians(this.pitch || -45),
+          roll: 0
+        },
+        2.0
+      )
+        .then(() => {
+          this.showMessage(`定位成功: 经度 ${this.longitude.toFixed(6)}, 纬度 ${this.latitude.toFixed(6)}`, 'success');
+        })
+        .catch((error) => {
+          this.showMessage('定位失败: ' + error.message, 'error');
+        });
+    },
+
+    /**
+     * 处理定位按钮点击
+     */
     handleLocate() {
-      // 验证输入
-      if (!this.isValidCoordinate(this.longitude, -180, 180)) {
-        this.showMessage('经度必须在 -180 到 180 之间', 'error');
-        return;
-      }
-      if (!this.isValidCoordinate(this.latitude, -90, 90)) {
-        this.showMessage('纬度必须在 -90 到 90 之间', 'error');
-        return;
-      }
-      if (!this.isValidCoordinate(this.height, -1000, 100000)) {
-        this.showMessage('高度必须在合理范围内', 'error');
+      // 使用基类的 validateLonLat 方法验证坐标
+      const validation = this.validateLonLat(this.longitude, this.latitude, this.height);
+      if (!validation.valid) {
+        this.showMessage(validation.message, 'error');
         return;
       }
 
       // 检查 Cesium 是否就绪
       if (!this.checkCesiumReady()) {
         this.showMessage('等待 Cesium 初始化...', 'info');
-        console.log('[TestSfc] 等待 Cesium 初始化...');
-
         // 等待 Cesium 就绪后再执行定位
         this.waitForCesium(() => {
           this.executeLocate();
-        }, 20); // 最多等待 2 秒
+        }, 20);
         return;
       }
 
       this.executeLocate();
     },
-    executeLocate() {
-      // 再次检查 Cesium 是否就绪
-      if (!this.checkCesiumReady()) {
-        this.showMessage('Cesium 未就绪，无法定位', 'error');
-        console.warn('[TestSfc] window.__cesiumViewer__ 仍然不可用');
-        console.log('[TestSfc] window.Cesium:', typeof window !== 'undefined' ? typeof window.Cesium : 'undefined');
-        console.log('[TestSfc] window.__cesiumViewer__:', typeof window !== 'undefined' ? window.__cesiumViewer__ : 'undefined');
-        return;
-      }
 
-      this.showMessage('正在定位...', 'info');
+    /**
+     * 覆盖基类的 showMessage 方法，使用 TestSfc 特有的消息显示方式
+     */
+    showMessage(message, type = 'info', duration = 3000) {
+      // 调用基类的 showMessage（记录日志）
+      super.showMessage(message, type, 0); // 不自动清除，由子类处理
 
-      // 调用 Cesium 定位
-      try {
-        const viewer = window.__cesiumViewer__;
-        const destination = Cesium.Cartesian3.fromDegrees(
-          this.longitude,
-          this.latitude,
-          this.height
-        );
-
-        viewer.camera.flyTo({
-          destination: destination,
-          orientation: {
-            heading: Cesium.Math.toRadians(0),
-            pitch: Cesium.Math.toRadians(this.pitch || -45),
-            roll: 0.0
-          },
-          duration: 2.0
-        });
-
-        this.showMessage(`定位成功: 经度 ${this.longitude.toFixed(6)}, 纬度 ${this.latitude.toFixed(6)}`, 'success');
-      } catch (error) {
-        console.error('[TestSfc] 定位失败:', error);
-        this.showMessage('定位失败: ' + error.message, 'error');
-      }
-    },
-    isValidCoordinate(value, min, max) {
-      return typeof value === 'number' && !isNaN(value) && value >= min && value <= max;
-    },
-    showMessage(message, type = 'info') {
+      // TestSfc 特有的消息显示
       this.locateMessage = message;
       this.messageType = type;
-      // 3秒后自动清除消息
-      setTimeout(() => {
-        this.locateMessage = '';
-      }, 3000);
-    },
-    checkCesiumReady() {
-      // 检查 Cesium 和 CesiumViewer 是否就绪
-      if (typeof window !== 'undefined' &&
-          typeof window.Cesium !== 'undefined' &&
-          window.__cesiumViewer__) {
-        this.cesiumReady = true;
-        console.log('[TestSfc] Cesium 已就绪');
-        return true;
-      }
-      return false;
-    },
-    waitForCesium(callback, maxAttempts = 50) {
-      let attempts = 0;
-      const checkInterval = setInterval(() => {
-        attempts++;
-        if (this.checkCesiumReady()) {
-          clearInterval(checkInterval);
-          if (callback) callback();
-        } else if (attempts >= maxAttempts) {
-          clearInterval(checkInterval);
-          console.warn('[TestSfc] Cesium 初始化超时');
-        }
-      }, 100);
-    },
-    handleClose() {
-      // 通过实例特定的全局事件通知父组件
-      if (typeof window !== 'undefined') {
-        const closeEvent = new CustomEvent(this.closeEventName);
-        window.dispatchEvent(closeEvent);
 
-        if (this.closeEventName === 'testSfcClose' && window.__testSfcOnClose && typeof window.__testSfcOnClose === 'function') {
-          window.__testSfcOnClose();
-        }
+      // 自动清除消息
+      if (duration > 0 && typeof this.clearMessage === 'function') {
+        setTimeout(() => this.clearMessage(), duration);
       }
     },
-    // 拖动相关方法
+
+    /**
+     * 覆盖基类的 clearMessage 方法
+     */
+    clearMessage() {
+      this.locateMessage = '';
+    },
+
+    /**
+     * 覆盖基类的 handleClose 方法，添加 TestSfc 特有的关闭逻辑
+     */
+    handleClose() {
+      // 调用基类的 handleClose（触发事件和回调）
+      super.handleClose();
+
+      // TestSfc 特有的关闭逻辑
+      if (typeof window !== 'undefined' &&
+          this.closeEventName === 'testSfcClose' &&
+          window.__testSfcOnClose &&
+          typeof window.__testSfcOnClose === 'function') {
+        window.__testSfcOnClose();
+      }
+    },
+
+    // ==================== 拖动相关方法 ====================
+
+    /**
+     * 开始拖动
+     */
     startDrag(event) {
       // 只在左键点击时开始拖动，且确保点击的是头部而非关闭按钮
       if (event.button !== 0) return;
@@ -257,6 +251,10 @@ export default {
         this.initialPosition = { ...this.position };
       }
 
+      // 使用基类的事件绑定方法
+      this.boundOnDrag = this.bindEventHandler('onDrag', this.onDrag);
+      this.boundStopDrag = this.bindEventHandler('stopDrag', this.stopDrag);
+
       // 添加全局事件监听器
       document.addEventListener('mousemove', this.boundOnDrag);
       document.addEventListener('mouseup', this.boundStopDrag);
@@ -264,6 +262,10 @@ export default {
       // 防止选中文本
       event.preventDefault();
     },
+
+    /**
+     * 拖动中
+     */
     onDrag(event) {
       if (!this.isDragging) return;
 
@@ -275,8 +277,8 @@ export default {
       let newY = this.initialPosition.y + deltaY;
 
       // 边界检查：确保组件不会被拖出屏幕
-      const maxLeft = window.innerWidth - 350; // 350是组件宽度
-      const maxTop = window.innerHeight - 200; // 最小可见高度200px
+      const maxLeft = window.innerWidth - 350;
+      const maxTop = window.innerHeight - 200;
 
       newX = Math.max(0, Math.min(newX, maxLeft));
       newY = Math.max(0, Math.min(newY, maxTop));
@@ -286,41 +288,47 @@ export default {
         y: newY
       };
     },
+
+    /**
+     * 停止拖动
+     */
     stopDrag() {
       if (this.isDragging) {
         this.isDragging = false;
 
         // 移除全局事件监听器
-        document.removeEventListener('mousemove', this.boundOnDrag);
-        document.removeEventListener('mouseup', this.boundStopDrag);
+        if (this.boundOnDrag) {
+          document.removeEventListener('mousemove', this.boundOnDrag);
+        }
+        if (this.boundStopDrag) {
+          document.removeEventListener('mouseup', this.boundStopDrag);
+        }
       }
     }
   },
   mounted() {
-    console.log('[TestSfc] 组件已挂载');
-
-    // 根据实例 ID 计算偏移量
-    const offset = (this.instanceId - 1) * 30;
-    this.right = 20 + offset;
-    this.position.y = 100 + offset;
-
-    // 检查 Cesium 是否就绪
-    this.checkCesiumReady();
-    if (!this.cesiumReady) {
-      console.log('[TestSfc] 等待 Cesium 初始化...');
-      this.waitForCesium();
-    }
-
-    // 绑定事件处理器到组件实例，确保引用正确
-    this.boundOnDrag = this.onDrag.bind(this);
-    this.boundStopDrag = this.stopDrag.bind(this);
+    // 调用基类的 initCesium 方法（会初始化日志和等待 Cesium）
+    this.initCesium(() => {
+      // TestSfc 特有的初始化逻辑
+      // 根据实例 ID 计算偏移量
+      const offset = (this.instanceId - 1) * 30;
+      this.right = 20 + offset;
+      this.position.y = 100 + offset;
+    });
   },
   beforeUnmount() {
-    // 清理事件监听器（如果仍在拖拽中）
+    // 清理拖动相关的事件监听器
     if (this.isDragging) {
-      document.removeEventListener('mousemove', this.boundOnDrag);
-      document.removeEventListener('mouseup', this.boundStopDrag);
+      if (this.boundOnDrag) {
+        document.removeEventListener('mousemove', this.boundOnDrag);
+      }
+      if (this.boundStopDrag) {
+        document.removeEventListener('mouseup', this.boundStopDrag);
+      }
     }
+
+    // 调用基类的 cleanup 方法
+    this.cleanup();
   }
 };
 </script>

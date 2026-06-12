@@ -1,11 +1,161 @@
-import { createCommentVNode as e, createElementBlock as t, createElementVNode as n, normalizeClass as r, normalizeStyle as i, openBlock as a, toDisplayString as o, vModelText as s, withDirectives as c } from "vue";
+import { Fragment as e, createCommentVNode as t, createElementBlock as n, createElementVNode as r, normalizeClass as i, normalizeStyle as a, openBlock as o, toDisplayString as s, vModelText as c, withDirectives as l } from "vue";
 //#region \0plugin-vue:export-helper
-var l = (e, t) => {
+var u = (e, t) => {
 	let n = e.__vccOpts || e;
 	for (let [e, r] of t) n[e] = r;
 	return n;
-}, u = {
+}, d = {
+	name: "SfcBase",
+	props: { onClose: {
+		type: Function,
+		default: null
+	} },
+	inject: {
+		closeEventName: { default: "sfcBaseClose" },
+		instanceId: { default: 1 }
+	},
+	data() {
+		return {
+			cesiumReady: !1,
+			cesiumCheckInterval: null,
+			componentName: "SfcBase",
+			boundEventHandlers: {}
+		};
+	},
+	methods: {
+		checkCesiumReady() {
+			return typeof window < "u" && window.Cesium !== void 0 && window.__cesiumViewer__ ? (this.cesiumReady = !0, this.$logger?.info?.("[SfcBase] Cesium 已就绪"), !0) : !1;
+		},
+		waitForCesium(e, t = 50, n = 100) {
+			let r = 0;
+			this.cesiumCheckInterval && clearInterval(this.cesiumCheckInterval), this.cesiumCheckInterval = setInterval(() => {
+				r++, this.checkCesiumReady() ? (clearInterval(this.cesiumCheckInterval), this.cesiumCheckInterval = null, e && typeof e == "function" && e()) : r >= t && (clearInterval(this.cesiumCheckInterval), this.cesiumCheckInterval = null, this.$logger?.warn?.(`[${this.componentName}] Cesium 初始化超时`));
+			}, n);
+		},
+		getCesiumViewer() {
+			return this.checkCesiumReady() ? window.__cesiumViewer__ : (this.$logger?.warn?.(`[${this.componentName}] Cesium 未就绪，无法获取 Viewer`), null);
+		},
+		getCesium() {
+			return typeof window < "u" && window.Cesium !== void 0 ? window.Cesium : (this.$logger?.warn?.(`[${this.componentName}] Cesium 全局对象不存在`), null);
+		},
+		isValidCoordinate(e, t, n) {
+			return typeof e == "number" && !isNaN(e) && e >= t && e <= n;
+		},
+		validateLonLat(e, t, n = null) {
+			return this.isValidCoordinate(e, -180, 180) ? this.isValidCoordinate(t, -90, 90) ? n !== null && !this.isValidCoordinate(n, -1e3, 1e5) ? {
+				valid: !1,
+				message: "高度必须在合理范围内"
+			} : {
+				valid: !0,
+				message: "坐标有效"
+			} : {
+				valid: !1,
+				message: "纬度必须在 -90 到 90 之间"
+			} : {
+				valid: !1,
+				message: "经度必须在 -180 到 180 之间"
+			};
+		},
+		showMessage(e, t = "info", n = 3e3) {
+			this.$logger?.info?.(`[${this.componentName}] ${t.toUpperCase()}: ${e}`), this.messageContent !== void 0 && (this.messageContent = e), this.messageType !== void 0 && (this.messageType = t), n > 0 && typeof this.clearMessage == "function" && setTimeout(() => this.clearMessage(), n);
+		},
+		clearMessage() {
+			this.messageContent !== void 0 && (this.messageContent = "");
+		},
+		handleClose() {
+			if (typeof window < "u") {
+				let e = new CustomEvent(this.closeEventName, { detail: {
+					componentName: this.componentName,
+					instanceId: this.instanceId
+				} });
+				window.dispatchEvent(e), this.onClose && typeof this.onClose == "function" && this.onClose(), this.$logger?.info?.(`[${this.componentName}] 关闭事件已触发`);
+			}
+		},
+		bindEventHandler(e, t) {
+			if (typeof t != "function") return this.$logger?.warn?.(`[${this.componentName}] 事件处理器必须是函数`), null;
+			let n = t.bind(this);
+			return this.boundEventHandlers[e] = n, n;
+		},
+		getBoundHandler(e) {
+			return this.boundEventHandlers[e] || null;
+		},
+		clearBoundHandlers() {
+			this.boundEventHandlers = {};
+		},
+		flyToPosition(e, t, n, r = {}, i = 2) {
+			return new Promise((a, o) => {
+				let s = this.getCesiumViewer();
+				if (!s) {
+					o(/* @__PURE__ */ Error("Cesium Viewer 不可用"));
+					return;
+				}
+				let c = this.getCesium();
+				if (!c) {
+					o(/* @__PURE__ */ Error("Cesium 全局对象不可用"));
+					return;
+				}
+				try {
+					let l = c.Cartesian3.fromDegrees(e, t, n), u = {
+						heading: c.Math.toRadians(0),
+						pitch: c.Math.toRadians(-45),
+						roll: 0
+					};
+					s.camera.flyTo({
+						destination: l,
+						orientation: {
+							...u,
+							...r
+						},
+						duration: i,
+						complete: () => a(),
+						cancel: () => o(/* @__PURE__ */ Error("飞行操作被取消"))
+					});
+				} catch (e) {
+					o(e);
+				}
+			});
+		},
+		viewGround(e, t, n = 0) {
+			return this.flyToPosition(e, t, n, {
+				heading: 0,
+				pitch: -90,
+				roll: 0
+			}, 1.5);
+		},
+		createLogger() {
+			let e = `[${this.componentName}]`;
+			return {
+				info: (t) => console.log(`${e} ${t}`),
+				warn: (t) => console.warn(`${e} ⚠️ ${t}`),
+				error: (t) => console.error(`${e} ❌ ${t}`),
+				debug: (t) => console.debug(`${e} 🔍 ${t}`)
+			};
+		},
+		initCesium(e) {
+			this.$logger = this.createLogger(), this.$logger?.info?.("组件初始化"), this.checkCesiumReady() ? e && e() : (this.$logger?.info?.("等待 Cesium 初始化..."), this.waitForCesium(() => {
+				this.$logger?.info?.("Cesium 已就绪"), e && e();
+			}));
+		},
+		cleanup() {
+			this.cesiumCheckInterval &&= (clearInterval(this.cesiumCheckInterval), null), this.clearBoundHandlers(), this.$logger?.info?.("资源已清理");
+		}
+	},
+	mounted() {},
+	beforeUnmount() {
+		this.cleanup();
+	}
+}, f = {
+	class: "sfc-base",
+	style: { display: "none" }
+};
+function p(i, a, s, c, l, u) {
+	return o(), n(e, null, [t(" 基础组件无界面元素，仅作为逻辑基类 "), r("div", f)], 2112);
+}
+//#endregion
+//#region src/components/TestSfc.vue
+var m = {
 	name: "TestSfc",
+	extends: /* @__PURE__ */ u(d, [["render", p]]),
 	props: { onClose: {
 		type: Function,
 		default: null
@@ -16,13 +166,13 @@ var l = (e, t) => {
 	},
 	data() {
 		return {
+			componentName: "TestSfc",
 			longitude: 0,
 			latitude: 0,
 			height: 1e3,
 			pitch: -45,
 			locateMessage: "",
 			messageType: "info",
-			cesiumReady: !1,
 			position: {
 				x: "auto",
 				y: 0
@@ -42,69 +192,43 @@ var l = (e, t) => {
 		};
 	},
 	methods: {
+		executeLocate() {
+			if (!this.checkCesiumReady()) {
+				this.showMessage("Cesium 未就绪，无法定位", "error");
+				return;
+			}
+			this.showMessage("正在定位...", "info"), this.flyToPosition(this.longitude, this.latitude, this.height, {
+				heading: 0,
+				pitch: Cesium.Math.toRadians(this.pitch || -45),
+				roll: 0
+			}, 2).then(() => {
+				this.showMessage(`定位成功: 经度 ${this.longitude.toFixed(6)}, 纬度 ${this.latitude.toFixed(6)}`, "success");
+			}).catch((e) => {
+				this.showMessage("定位失败: " + e.message, "error");
+			});
+		},
 		handleLocate() {
-			if (!this.isValidCoordinate(this.longitude, -180, 180)) {
-				this.showMessage("经度必须在 -180 到 180 之间", "error");
-				return;
-			}
-			if (!this.isValidCoordinate(this.latitude, -90, 90)) {
-				this.showMessage("纬度必须在 -90 到 90 之间", "error");
-				return;
-			}
-			if (!this.isValidCoordinate(this.height, -1e3, 1e5)) {
-				this.showMessage("高度必须在合理范围内", "error");
+			let e = this.validateLonLat(this.longitude, this.latitude, this.height);
+			if (!e.valid) {
+				this.showMessage(e.message, "error");
 				return;
 			}
 			if (!this.checkCesiumReady()) {
-				this.showMessage("等待 Cesium 初始化...", "info"), console.log("[TestSfc] 等待 Cesium 初始化..."), this.waitForCesium(() => {
+				this.showMessage("等待 Cesium 初始化...", "info"), this.waitForCesium(() => {
 					this.executeLocate();
 				}, 20);
 				return;
 			}
 			this.executeLocate();
 		},
-		executeLocate() {
-			if (!this.checkCesiumReady()) {
-				this.showMessage("Cesium 未就绪，无法定位", "error"), console.warn("[TestSfc] window.__cesiumViewer__ 仍然不可用"), console.log("[TestSfc] window.Cesium:", typeof window < "u" ? typeof window.Cesium : "undefined"), console.log("[TestSfc] window.__cesiumViewer__:", typeof window < "u" ? window.__cesiumViewer__ : "undefined");
-				return;
-			}
-			this.showMessage("正在定位...", "info");
-			try {
-				let e = window.__cesiumViewer__, t = Cesium.Cartesian3.fromDegrees(this.longitude, this.latitude, this.height);
-				e.camera.flyTo({
-					destination: t,
-					orientation: {
-						heading: Cesium.Math.toRadians(0),
-						pitch: Cesium.Math.toRadians(this.pitch || -45),
-						roll: 0
-					},
-					duration: 2
-				}), this.showMessage(`定位成功: 经度 ${this.longitude.toFixed(6)}, 纬度 ${this.latitude.toFixed(6)}`, "success");
-			} catch (e) {
-				console.error("[TestSfc] 定位失败:", e), this.showMessage("定位失败: " + e.message, "error");
-			}
+		showMessage(e, t = "info", n = 3e3) {
+			super.showMessage(e, t, 0), this.locateMessage = e, this.messageType = t, n > 0 && typeof this.clearMessage == "function" && setTimeout(() => this.clearMessage(), n);
 		},
-		isValidCoordinate(e, t, n) {
-			return typeof e == "number" && !isNaN(e) && e >= t && e <= n;
-		},
-		showMessage(e, t = "info") {
-			this.locateMessage = e, this.messageType = t, setTimeout(() => {
-				this.locateMessage = "";
-			}, 3e3);
-		},
-		checkCesiumReady() {
-			return typeof window < "u" && window.Cesium !== void 0 && window.__cesiumViewer__ ? (this.cesiumReady = !0, console.log("[TestSfc] Cesium 已就绪"), !0) : !1;
-		},
-		waitForCesium(e, t = 50) {
-			let n = 0, r = setInterval(() => {
-				n++, this.checkCesiumReady() ? (clearInterval(r), e && e()) : n >= t && (clearInterval(r), console.warn("[TestSfc] Cesium 初始化超时"));
-			}, 100);
+		clearMessage() {
+			this.locateMessage = "";
 		},
 		handleClose() {
-			if (typeof window < "u") {
-				let e = new CustomEvent(this.closeEventName);
-				window.dispatchEvent(e), this.closeEventName === "testSfcClose" && window.__testSfcOnClose && typeof window.__testSfcOnClose == "function" && window.__testSfcOnClose();
-			}
+			super.handleClose(), typeof window < "u" && this.closeEventName === "testSfcClose" && window.__testSfcOnClose && typeof window.__testSfcOnClose == "function" && window.__testSfcOnClose();
 		},
 		startDrag(e) {
 			if (e.button === 0 && !e.target.closest(".close-btn")) {
@@ -118,7 +242,7 @@ var l = (e, t) => {
 						y: e.top
 					};
 				} else this.initialPosition = { ...this.position };
-				document.addEventListener("mousemove", this.boundOnDrag), document.addEventListener("mouseup", this.boundStopDrag), e.preventDefault();
+				this.boundOnDrag = this.bindEventHandler("onDrag", this.onDrag), this.boundStopDrag = this.bindEventHandler("stopDrag", this.stopDrag), document.addEventListener("mousemove", this.boundOnDrag), document.addEventListener("mouseup", this.boundStopDrag), e.preventDefault();
 			}
 		},
 		onDrag(e) {
@@ -130,36 +254,37 @@ var l = (e, t) => {
 			};
 		},
 		stopDrag() {
-			this.isDragging && (this.isDragging = !1, document.removeEventListener("mousemove", this.boundOnDrag), document.removeEventListener("mouseup", this.boundStopDrag));
+			this.isDragging && (this.isDragging = !1, this.boundOnDrag && document.removeEventListener("mousemove", this.boundOnDrag), this.boundStopDrag && document.removeEventListener("mouseup", this.boundStopDrag));
 		}
 	},
 	mounted() {
-		console.log("[TestSfc] 组件已挂载");
-		let e = (this.instanceId - 1) * 30;
-		this.right = 20 + e, this.position.y = 100 + e, this.checkCesiumReady(), this.cesiumReady || (console.log("[TestSfc] 等待 Cesium 初始化..."), this.waitForCesium()), this.boundOnDrag = this.onDrag.bind(this), this.boundStopDrag = this.stopDrag.bind(this);
+		this.initCesium(() => {
+			let e = (this.instanceId - 1) * 30;
+			this.right = 20 + e, this.position.y = 100 + e;
+		});
 	},
 	beforeUnmount() {
-		this.isDragging && (document.removeEventListener("mousemove", this.boundOnDrag), document.removeEventListener("mouseup", this.boundStopDrag));
+		this.isDragging && (this.boundOnDrag && document.removeEventListener("mousemove", this.boundOnDrag), this.boundStopDrag && document.removeEventListener("mouseup", this.boundStopDrag)), this.cleanup();
 	}
-}, d = { class: "test-sfc-body" }, f = { class: "location-form" }, p = { class: "form-group" }, m = { class: "form-group" }, h = { class: "form-group" }, g = { class: "form-group" };
-function _(l, u, _, v, y, b) {
-	return a(), t("div", {
-		class: r(["test-sfc-modal", { "is-dragging": y.isDragging }]),
-		style: i({
-			left: y.position.x === "auto" ? "auto" : y.position.x + "px",
-			top: y.position.y + "px",
-			right: y.position.x === "auto" ? y.right + "px" : "auto"
+}, h = { class: "test-sfc-body" }, g = { class: "location-form" }, _ = { class: "form-group" }, v = { class: "form-group" }, y = { class: "form-group" }, b = { class: "form-group" };
+function x(e, u, d, f, p, m) {
+	return o(), n("div", {
+		class: i(["test-sfc-modal", { "is-dragging": p.isDragging }]),
+		style: a({
+			left: p.position.x === "auto" ? "auto" : p.position.x + "px",
+			top: p.position.y + "px",
+			right: p.position.x === "auto" ? p.right + "px" : "auto"
 		}),
 		ref: "modalRef"
-	}, [n("div", {
-		class: r(["test-sfc-header", { dragging: y.isDragging }]),
-		onMousedown: u[1] ||= (...e) => b.startDrag && b.startDrag(...e)
-	}, [u[7] ||= n("h3", null, "🧪 TestSfc 测试组件", -1), n("button", {
-		onClick: u[0] ||= (...e) => b.handleClose && b.handleClose(...e),
+	}, [r("div", {
+		class: i(["test-sfc-header", { dragging: p.isDragging }]),
+		onMousedown: u[1] ||= (...e) => m.startDrag && m.startDrag(...e)
+	}, [u[7] ||= r("h3", null, "🧪 TestSfc 测试组件", -1), r("button", {
+		onClick: u[0] ||= (...e) => m.handleClose && m.handleClose(...e),
 		class: "close-btn"
-	}, "×")], 34), n("div", d, [n("div", f, [
-		n("div", p, [u[8] ||= n("label", { class: "form-label" }, [n("span", { class: "label-icon" }, "📍"), n("span", null, "经度")], -1), c(n("input", {
-			"onUpdate:modelValue": u[2] ||= (e) => y.longitude = e,
+	}, "×")], 34), r("div", h, [r("div", g, [
+		r("div", _, [u[8] ||= r("label", { class: "form-label" }, [r("span", { class: "label-icon" }, "📍"), r("span", null, "经度")], -1), l(r("input", {
+			"onUpdate:modelValue": u[2] ||= (e) => p.longitude = e,
 			type: "number",
 			step: "0.000001",
 			min: "-180",
@@ -167,13 +292,13 @@ function _(l, u, _, v, y, b) {
 			class: "form-input",
 			placeholder: "输入经度 (-180 ~ 180)"
 		}, null, 512), [[
-			s,
-			y.longitude,
+			c,
+			p.longitude,
 			void 0,
 			{ number: !0 }
 		]])]),
-		n("div", m, [u[9] ||= n("label", { class: "form-label" }, [n("span", { class: "label-icon" }, "🌐"), n("span", null, "纬度")], -1), c(n("input", {
-			"onUpdate:modelValue": u[3] ||= (e) => y.latitude = e,
+		r("div", v, [u[9] ||= r("label", { class: "form-label" }, [r("span", { class: "label-icon" }, "🌐"), r("span", null, "纬度")], -1), l(r("input", {
+			"onUpdate:modelValue": u[3] ||= (e) => p.latitude = e,
 			type: "number",
 			step: "0.000001",
 			min: "-90",
@@ -181,25 +306,25 @@ function _(l, u, _, v, y, b) {
 			class: "form-input",
 			placeholder: "输入纬度 (-90 ~ 90)"
 		}, null, 512), [[
-			s,
-			y.latitude,
+			c,
+			p.latitude,
 			void 0,
 			{ number: !0 }
 		]])]),
-		n("div", h, [u[10] ||= n("label", { class: "form-label" }, [n("span", { class: "label-icon" }, "🔭"), n("span", null, "高度")], -1), c(n("input", {
-			"onUpdate:modelValue": u[4] ||= (e) => y.height = e,
+		r("div", y, [u[10] ||= r("label", { class: "form-label" }, [r("span", { class: "label-icon" }, "🔭"), r("span", null, "高度")], -1), l(r("input", {
+			"onUpdate:modelValue": u[4] ||= (e) => p.height = e,
 			type: "number",
 			step: "0.1",
 			class: "form-input",
 			placeholder: "输入高度 (米)"
 		}, null, 512), [[
-			s,
-			y.height,
+			c,
+			p.height,
 			void 0,
 			{ number: !0 }
 		]])]),
-		n("div", g, [u[11] ||= n("label", { class: "form-label" }, [n("span", { class: "label-icon" }, "⤵"), n("span", null, "俯仰角")], -1), c(n("input", {
-			"onUpdate:modelValue": u[5] ||= (e) => y.pitch = e,
+		r("div", b, [u[11] ||= r("label", { class: "form-label" }, [r("span", { class: "label-icon" }, "⤵"), r("span", null, "俯仰角")], -1), l(r("input", {
+			"onUpdate:modelValue": u[5] ||= (e) => p.pitch = e,
 			type: "number",
 			step: "0.1",
 			min: "-90",
@@ -207,21 +332,21 @@ function _(l, u, _, v, y, b) {
 			class: "form-input",
 			placeholder: "俯仰角 (-90 ~ 0)"
 		}, null, 512), [[
-			s,
-			y.pitch,
+			c,
+			p.pitch,
 			void 0,
 			{ number: !0 }
 		]])]),
-		n("button", {
-			onClick: u[6] ||= (...e) => b.handleLocate && b.handleLocate(...e),
+		r("button", {
+			onClick: u[6] ||= (...e) => m.handleLocate && m.handleLocate(...e),
 			class: "locate-btn"
-		}, [...u[12] ||= [n("span", { class: "btn-icon" }, "🎯", -1), n("span", null, "定位", -1)]]),
-		y.locateMessage ? (a(), t("div", {
+		}, [...u[12] ||= [r("span", { class: "btn-icon" }, "🎯", -1), r("span", null, "定位", -1)]]),
+		p.locateMessage ? (o(), n("div", {
 			key: 0,
-			class: r(["locate-message", y.messageType])
-		}, o(y.locateMessage), 3)) : e("", !0)
+			class: i(["locate-message", p.messageType])
+		}, s(p.locateMessage), 3)) : t("v-if", !0)
 	])])], 6);
 }
-var v = /*#__PURE__*/ l(u, [["render", _]]);
+var S = /*#__PURE__*/ u(m, [["render", x]]);
 //#endregion
-export { v as default };
+export { S as default };
