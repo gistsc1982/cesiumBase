@@ -1,0 +1,5 @@
+1、文件Scene.js,第1723行 -添加着色器重新编译模式，便于修改可视域颜色
+2、文件ShadowMap.js,第1835行 -添加着色器重新编译模式，便于修改可视域颜色
+3、文件ShadowMapShader.js,第406行 -添加视域模式
+4、文件GeoJsonDataSource.js,第318,521行 -删除坐标长度判断，clampToGround忽略坐标长度
+5、文件Resource.js,第345,647行 -处理url中的+问题

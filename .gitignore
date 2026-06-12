@@ -54,7 +54,3 @@ public/test-sfc/sfcLib/
 !public/test-sfc/sfcLib/dist/dual-canvas-viewer-sfc/lib/three.module.mjs
 !public/test-sfc/sfcLib/dist/dual-canvas-viewer-sfc/lib/ENUCoordinateManager.mjs
 !public/test-sfc/sfcLib/dist/dual-canvas-viewer-sfc/lib/operation-handlers.mjs
-
-# Cesium 库文件 (包含敏感 token)
-public/Cesium/
-src/Source/
