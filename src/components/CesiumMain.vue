@@ -78,6 +78,19 @@
       </div>
 
       <div class="panel-body-scroll">
+        <!-- 双画布控制面板开关 -->
+        <div class="control-panel-toggle">
+          <label class="toggle-checkbox">
+            <input
+              type="checkbox"
+              v-model="showDualControlPanel"
+              @change="onDualControlPanelToggle"
+            />
+            <span class="toggle-label">🎛️ 双画布控制面板</span>
+            <span class="toggle-hint" title="显示/隐藏右侧控制面板">💡</span>
+          </label>
+        </div>
+
         <!-- 倾斜摄影加载列表 -->
         <div class="oblique-photography-section">
           <div class="section-title">📷 倾斜摄影加载</div>
@@ -492,7 +505,9 @@ export default {
       // ⭐ 新增：统一高度对齐管理器
       heightAlignmentManager: null,
       // 高度对齐模式选择
-      alignmentMode: 'terrain'  // 'terrain' | 'model' | 'smart'
+      alignmentMode: 'terrain',  // 'terrain' | 'model' | 'smart'
+      // ⭐ 新增：双画布控制面板显示控制
+      showDualControlPanel: false
     };
   },
   computed: {
@@ -572,6 +587,18 @@ export default {
         default:
           console.warn('[HelloWorld] 未知的工具条按钮:', button.id);
       }
+    },
+
+    // ==================== 双画布控制面板方法 ====================
+
+    /**
+     * 切换双画布控制面板显示状态
+     */
+    onDualControlPanelToggle() {
+      console.log('[HelloWorld] 双画布控制面板:', this.showDualControlPanel ? '显示' : '隐藏');
+
+      // 调用 DualCanvasViewer 的方法
+      window.__dualCanvasViewer__?.toggleControlPanel(this.showDualControlPanel);
     },
 
     // ==================== 倾斜摄影加载方法 ====================
@@ -8481,6 +8508,48 @@ body,
 
 .floor-height-adjuster .panel-body-scroll::-webkit-scrollbar-thumb:hover {
   background: rgba(255, 255, 255, 0.5);
+}
+
+/* 双画布控制面板开关样式 */
+.floor-height-adjuster .control-panel-toggle {
+  margin-bottom: 16px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.floor-height-adjuster .toggle-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  user-select: none;
+  padding: 8px 12px;
+  border-radius: 6px;
+  transition: background-color 0.2s;
+}
+
+.floor-height-adjuster .toggle-checkbox:hover {
+  background-color: rgba(255, 255, 255, 0.05);
+}
+
+.floor-height-adjuster .toggle-checkbox input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  accent-color: #4CAF50;
+  cursor: pointer;
+}
+
+.floor-height-adjuster .toggle-label {
+  font-size: 13px;
+  font-weight: 500;
+  color: #fff;
+  flex: 1;
+}
+
+.floor-height-adjuster .toggle-hint {
+  font-size: 14px;
+  cursor: help;
+  opacity: 0.7;
 }
 
 /* 倾斜摄影列表样式 */

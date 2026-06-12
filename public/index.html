@@ -38,23 +38,7 @@
         "three": "./libs/three.module.js",
         "three/addons/": "./libs/three/addons/",
         "xeokit-sdk": "./libs/xeokit-sdk.min.es.js",
-        "web-ifc": "./libs/web-ifc-api.js",
-        "./utils/rendererManager.js": "./utils/rendererManager.js",
-        "./utils/CoordinateSystem.js": "./utils/CoordinateSystem.js",
-        "./utils/SyncManager.js": "./utils/SyncManager.js",
-        "./utils/MercatorProjectionManager.js": "./utils/MercatorProjectionManager.js",
-        "./utils/PrecisionModelLoader.js": "./utils/PrecisionModelLoader.js",
-        "./utils/ENUCoordinateManager.js": "./utils/ENUCoordinateManager.js",
-        "./utils/HeightAlignmentManager.js": "./utils/HeightAlignmentManager.js",
-        "./utils/SceneRotationManager.js": "./utils/SceneRotationManager.js",
-        "./utils/SceneRotationIntegration.js": "./utils/SceneRotationIntegration.js",
-        "./utils/ModelMercatorMetadataManager.js": "./utils/ModelMercatorMetadataManager.js",
-        "./utils/operation-handlers/ThreeJSPanHandler.js": "./utils/operation-handlers/ThreeJSPanHandler.js",
-        "./utils/operation-handlers/ThreeJSZoomHandler.js": "./utils/operation-handlers/ThreeJSZoomHandler.js",
-        "./utils/operation-handlers/SurfaceModeDetector.js": "./utils/operation-handlers/SurfaceModeDetector.js",
-        "./utils/operation-handlers/ControlsRestrictionManager.js": "./utils/operation-handlers/ControlsRestrictionManager.js",
-        "./utils/operation-handlers/index.js": "./utils/operation-handlers/index.js",
-        "./utils/MouseOperationCoordinator.js": "./utils/MouseOperationCoordinator.js"
+        "web-ifc": "./libs/web-ifc-api.js"
       }
     }
     </script>
@@ -75,7 +59,8 @@
     <script src="<%= BASE_URL %>libs/vue.global.js"></script>
 
     <!-- ⭐ 工具模块全局加载脚本 -->
-    <script src="<%= BASE_URL %>load-utility-modules.js?v=2.4" type="module"></script>
+    <!-- 已禁用 - 工具模块现在从 dual-canvas-viewer-plugin.iife.js 中获取 -->
+    <!-- <script src="<%= BASE_URL %>load-utility-modules.js?v=2.4" type="module"></script> -->
 
     <!-- ⭐ DualCanvasViewer Plugin IIFE 版本 (用于 IIFE 加载模式) -->
     <script src="<%= BASE_URL %>dual-canvas-viewer-plugin.iife.js?v=2.4"></script>
