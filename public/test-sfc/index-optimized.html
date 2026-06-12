@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="">
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width,initial-scale=1.0">
+    <link rel="icon" href="<%= BASE_URL %>favicon.ico">
+    <link rel="stylesheet" href="<%= BASE_URL %>style.css">
+    <title><%= htmlWebpackPlugin.options.title %></title>
+  </head>
+  <body>
+    <noscript>
+      <strong>We're sorry but <%= htmlWebpackPlugin.options.title %></strong> doesn't work properly without JavaScript enabled. Please enable it to continue.</strong>
+    </noscript>
+
+    <!-- 浏览器环境 polyfill -->
+    <script>
+      window.process = { env: {} };
+      window.global = window.globalThis = window;
+    </script>
+    <!-- <script src="https://api.tianditu.gov.cn/cdn/plugins/cesium/Cesium_ext_min.js"></script> -->
+    <!-- Vue 3 (生产版本 - 用于 dual-canvas-viewer-plugin) -->
+    <script src="<%= BASE_URL %>vue.global.prod.js"></script>
+
+    <!-- xeokit SDK 动态加载 - 延迟加载 -->
+    <script src="./load-xeokit-dynamic.js"></script>
+
+    <!-- SyncManager 全局暴露 (必须在插件之前加载) -->
+    <script src="<%= BASE_URL %>sync-manager-global.js"></script>
+
+    <!-- DualCanvasViewer Plugin (内置兼容层) -->
+    <script src="<%= BASE_URL %>dual-canvas-viewer-plugin.iife.js"></script>
+
+    <!-- SyncManager 桥接脚本 (必须在插件之后加载) -->
+    <script src="<%= BASE_URL %>sync-manager-bridge.js"></script>
+
+    <!-- Cesium 与 Dual 组件双向同步脚本 V2 (基于 ok-rotation 子项目，支持左键翻转保护) -->
+    <script src="<%= BASE_URL %>cesium-dual-sync-v2.js"></script>
+
+    <div id="app"></div>
+    <!-- built files will be auto injected -->
+  </body>
+</html>

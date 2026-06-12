@@ -1,0 +1,1 @@
+/home/tang/Documents/code/woonuxt-master01/cdn/jsm/libs/draco/draco_wasm_wrapper.js

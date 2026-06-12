@@ -1,0 +1,60 @@
+.DS_Store
+node_modules
+/dist
+.nuxt
+.nitro
+.output
+output
+.claude
+
+# local env files
+.env.local
+.env.*.local
+
+# Log files
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Editor directories and files
+.idea
+.vscode
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Terrain tiles
+public/terrain_tiles
+
+# Independent git repositories
+base-cesium-vue/
+
+# Build-generated files in test-sfc
+# 忽略不需要的子目录，但保留必需的文件
+public/test-sfc/jsm/
+public/test-sfc/libs/
+public/test-sfc/cdn/
+public/test-sfc/output/
+public/test-sfc/plugins/
+public/test-sfc/sfc-plugin/
+
+# sfcLib 构建产物
+# 忽略所有文件，但保留必需文件（Three.js 现在是 external）
+public/test-sfc/sfcLib/
+
+# 但保留以下必需文件（Three.js 现在打包进组件）
+!public/test-sfc/sfcLib/dist/
+!public/test-sfc/sfcLib/dist/dual-canvas-viewer-sfc/
+!public/test-sfc/sfcLib/dist/dual-canvas-viewer-sfc/lib/
+!public/test-sfc/sfcLib/dist/dual-canvas-viewer-sfc/lib/dual-canvas-viewer.css
+!public/test-sfc/sfcLib/dist/dual-canvas-viewer-sfc/lib/dual-canvas-viewer.mjs
+!public/test-sfc/sfcLib/dist/dual-canvas-viewer-sfc/lib/three.module.mjs
+!public/test-sfc/sfcLib/dist/dual-canvas-viewer-sfc/lib/ENUCoordinateManager.mjs
+!public/test-sfc/sfcLib/dist/dual-canvas-viewer-sfc/lib/operation-handlers.mjs
+
+# Cesium 库文件 (包含敏感 token)
+public/Cesium/
+src/Source/

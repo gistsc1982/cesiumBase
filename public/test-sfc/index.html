@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="">
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width,initial-scale=1.0">
+    <link rel="icon" href="../favicon.ico">
+    <link rel="stylesheet" href="../style.css">
+    <!-- Cesium 样式表 -->
+    <link rel="stylesheet" href="../Cesium/Widgets/widgets.css">
+    <!-- DualCanvasViewer 样式表 -->
+    <link rel="stylesheet" href="../dual-canvas-viewer.css">
+    <title><%= htmlWebpackPlugin.options.title %></title>
+  </head>
+  <body>
+    <noscript>
+      <strong>We're sorry but <%= htmlWebpackPlugin.options.title %></strong> doesn't work properly without JavaScript enabled. Please enable it to continue.</strong>
+    </noscript>
+
+    <!-- 浏览器环境 polyfill -->
+    <script>
+      window.process = { env: {} };
+      window.global = window.globalThis = window;
+    </script>
+
+    <!-- ⭐ ES Module Shims (本地版本，提升加载性能) -->
+    <script async src="../libs/es-module-shims.js"></script>
+
+    <!-- Cesium 核心库由 webpack 编译提供 (统一版本 1.108，避免版本冲突) -->
+    <!-- 注意：旧版 cesiumTdt.js 不兼容 Cesium 1.108，已移除依赖 -->
+    <!-- 天地图功能使用 LayerControl.vue 组件实现 -->
+
+    <!-- ⭐ Import Map for ES modules (SFC 加载方式) -->
+    <script type="importmap">
+    {
+      "imports": {
+        "vue": "../libs/vue.esm-browser.js",
+        "three": "../libs/three.module.js",
+        "three/addons/": "../libs/three/addons/",
+        "xeokit-sdk": "../libs/xeokit-sdk.min.es.js",
+        "web-ifc": "../libs/web-ifc-api.js",
+        "../utils/rendererManager.js": "../utils/rendererManager.js",
+        "../utils/CoordinateSystem.js": "../utils/CoordinateSystem.js",
+        "../utils/SyncManager.js": "../utils/SyncManager.js",
+        "../utils/MercatorProjectionManager.js": "../utils/MercatorProjectionManager.js",
+        "../utils/PrecisionModelLoader.js": "../utils/PrecisionModelLoader.js",
+        "../utils/ENUCoordinateManager.js": "../utils/ENUCoordinateManager.js",
+        "../utils/HeightAlignmentManager.js": "../utils/HeightAlignmentManager.js",
+        "../utils/SceneRotationManager.js": "../utils/SceneRotationManager.js",
+        "../utils/SceneRotationIntegration.js": "../utils/SceneRotationIntegration.js",
+        "../utils/ModelMercatorMetadataManager.js": "../utils/ModelMercatorMetadataManager.js",
+        "../utils/operation-handlers/ThreeJSPanHandler.js": "../utils/operation-handlers/ThreeJSPanHandler.js",
+        "../utils/operation-handlers/ThreeJSZoomHandler.js": "../utils/operation-handlers/ThreeJSZoomHandler.js",
+        "../utils/operation-handlers/SurfaceModeDetector.js": "../utils/operation-handlers/SurfaceModeDetector.js",
+        "../utils/operation-handlers/ControlsRestrictionManager.js": "../utils/operation-handlers/ControlsRestrictionManager.js",
+        "../utils/operation-handlers/index.js": "../utils/operation-handlers/index.js",
+        "../utils/MouseOperationCoordinator.js": "../utils/MouseOperationCoordinator.js"
+      }
+    }
+    </script>
+
+    <!-- xeokit SDK 包装脚本 (作为模块加载) -->
+    <script src="../load-xeokit.js" type="module"></script>
+
+    <!-- ⭐ Three.js 全局加载脚本 -->
+    <script src="../load-three-globals.js" type="module"></script>
+
+    <!-- SyncManager 全局暴露 (必须在插件之前加载) -->
+    <script src="../sync-manager-global.js"></script>
+
+    <!-- ⭐ vue3-sfc-loader (使用本地版本，提升加载性能) -->
+    <script src="../libs/vue3-sfc-loader.js"></script>
+
+    <!-- ⭐ Vue 3 IIFE 版本 (本地版本，提升加载性能) -->
+    <script src="../libs/vue.global.js"></script>
+
+    <!-- ⭐ 工具模块全局加载脚本 -->
+    <script src="../load-utility-modules.js?v=2.4" type="module"></script>
+
+    <!-- ⭐ DualCanvasViewer Plugin IIFE 版本 (用于 IIFE 加载模式) -->
+    <script src="../dual-canvas-viewer-plugin.iife.js?v=2.4"></script>
+
+    <!-- SyncManager 桥接脚本 (必须在插件之后加载) -->
+    <script src="../sync-manager-bridge.js"></script>
+
+    <!-- Cesium 与 Dual 组件双向同步脚本 V2 (基于 ok-rotation 子项目，支持左键翻转保护) -->
+    <script src="../cesium-dual-sync-v2.js"></script>
+
+    <div id="app"></div>
+    <!-- built files will be auto injected -->
+  </body>
+</html>
