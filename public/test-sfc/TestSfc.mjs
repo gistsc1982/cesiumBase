@@ -155,7 +155,7 @@ function p(i, a, s, c, l, u) {
 //#region src/components/TestSfc.vue
 var m = {
 	name: "TestSfc",
-	extends: /* @__PURE__ */ u(d, [["render", p]]),
+	mixins: [/* @__PURE__ */ u(d, [["render", p]])],
 	props: { onClose: {
 		type: Function,
 		default: null
@@ -222,13 +222,20 @@ var m = {
 			this.executeLocate();
 		},
 		showMessage(e, t = "info", n = 3e3) {
-			super.showMessage(e, t, 0), this.locateMessage = e, this.messageType = t, n > 0 && typeof this.clearMessage == "function" && setTimeout(() => this.clearMessage(), n);
+			this.$logger?.info?.(`[${this.componentName}] ${t.toUpperCase()}: ${e}`), this.locateMessage = e, this.messageType = t, n > 0 && typeof this.clearMessage == "function" && setTimeout(() => this.clearMessage(), n);
 		},
 		clearMessage() {
 			this.locateMessage = "";
 		},
 		handleClose() {
-			super.handleClose(), typeof window < "u" && this.closeEventName === "testSfcClose" && window.__testSfcOnClose && typeof window.__testSfcOnClose == "function" && window.__testSfcOnClose();
+			if (typeof window < "u") {
+				let e = new CustomEvent(this.closeEventName, { detail: {
+					componentName: this.componentName,
+					instanceId: this.instanceId
+				} });
+				window.dispatchEvent(e), this.onClose && typeof this.onClose == "function" && this.onClose(), this.$logger?.info?.(`[${this.componentName}] 关闭事件已触发`);
+			}
+			typeof window < "u" && this.closeEventName === "testSfcClose" && window.__testSfcOnClose && typeof window.__testSfcOnClose == "function" && window.__testSfcOnClose();
 		},
 		startDrag(e) {
 			if (e.button === 0 && !e.target.closest(".close-btn")) {

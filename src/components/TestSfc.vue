@@ -94,7 +94,7 @@ import SfcBase from './SfcBase.vue';
 
 export default {
   name: 'TestSfc',
-  extends: SfcBase,
+  mixins: [SfcBase],
   props: {
     onClose: {
       type: Function,
@@ -194,8 +194,8 @@ export default {
      * 覆盖基类的 showMessage 方法，使用 TestSfc 特有的消息显示方式
      */
     showMessage(message, type = 'info', duration = 3000) {
-      // 调用基类的 showMessage（记录日志）
-      super.showMessage(message, type, 0); // 不自动清除，由子类处理
+      // 记录日志（基类的 showMessage 逻辑）
+      this.$logger?.info?.(`[${this.componentName}] ${type.toUpperCase()}: ${message}`);
 
       // TestSfc 特有的消息显示
       this.locateMessage = message;
@@ -218,8 +218,22 @@ export default {
      * 覆盖基类的 handleClose 方法，添加 TestSfc 特有的关闭逻辑
      */
     handleClose() {
-      // 调用基类的 handleClose（触发事件和回调）
-      super.handleClose();
+      // 基类的 handleClose 逻辑（触发事件和回调）
+      if (typeof window !== 'undefined') {
+        const closeEvent = new CustomEvent(this.closeEventName, {
+          detail: {
+            componentName: this.componentName,
+            instanceId: this.instanceId
+          }
+        });
+        window.dispatchEvent(closeEvent);
+
+        if (this.onClose && typeof this.onClose === 'function') {
+          this.onClose();
+        }
+
+        this.$logger?.info?.(`[${this.componentName}] 关闭事件已触发`);
+      }
 
       // TestSfc 特有的关闭逻辑
       if (typeof window !== 'undefined' &&

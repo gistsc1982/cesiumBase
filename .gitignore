@@ -54,3 +54,7 @@ public/test-sfc/sfcLib/
 !public/test-sfc/sfcLib/dist/dual-canvas-viewer-sfc/lib/three.module.mjs
 !public/test-sfc/sfcLib/dist/dual-canvas-viewer-sfc/lib/ENUCoordinateManager.mjs
 !public/test-sfc/sfcLib/dist/dual-canvas-viewer-sfc/lib/operation-handlers.mjs
+
+# 构建生成的辅助文件（组件列表和使用示例）
+public/test-sfc/components.json
+public/test-sfc/usage-examples.md
