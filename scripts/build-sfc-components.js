@@ -73,7 +73,33 @@ function checkExtendsSfcBase(filePath) {
 }
 
 /**
- * 扫描 src/components 目录下所有继承 SfcBase 的组件
+ * 递归扫描目录下所有 .vue 文件
+ * @param {string} dir - 要扫描的目录
+ * @param {Array} results - 收集结果的数组
+ */
+function scanDirectoryRecursively(dir, results = []) {
+  if (!fs.existsSync(dir)) {
+    return results;
+  }
+
+  const entries = fs.readdirSync(dir, { withFileTypes: true });
+
+  for (const entry of entries) {
+    const fullPath = path.join(dir, entry.name);
+
+    if (entry.isDirectory()) {
+      // 递归扫描子目录
+      scanDirectoryRecursively(fullPath, results);
+    } else if (entry.isFile() && entry.name.endsWith('.vue') && entry.name !== 'SfcBase.vue') {
+      results.push(fullPath);
+    }
+  }
+
+  return results;
+}
+
+/**
+ * 扫描 src/components 目录（包括子目录）下所有继承 SfcBase 的组件
  * @returns {Array} 发现的组件列表
  */
 function discoverSfcComponents() {
@@ -84,24 +110,30 @@ function discoverSfcComponents() {
     return [];
   }
 
-  const files = fs.readdirSync(componentsDir);
-  const vueFiles = files.filter(f => f.endsWith('.vue') && f !== 'SfcBase.vue');
+  log('🔍 递归扫描组件目录...', 'yellow');
+
+  // 递归扫描所有 .vue 文件
+  const vueFiles = scanDirectoryRecursively(componentsDir);
 
   const discovered = [];
 
-  for (const file of vueFiles) {
-    const filePath = path.resolve(componentsDir, file);
-    const componentName = file.replace('.vue', '');
+  for (const filePath of vueFiles) {
+    // 计算相对于 src/components 的路径
+    const relativePath = path.relative(path.resolve(CONFIG.rootDir, CONFIG.srcDir), filePath);
+    const componentName = path.basename(filePath, '.vue');
+    const subDir = path.dirname(relativePath).replace(/\\/g, '/'); // Windows 路径处理
 
     // 检查是否继承 SfcBase
     if (checkExtendsSfcBase(filePath)) {
       discovered.push({
         name: componentName,
-        entry: path.join(CONFIG.srcDir, file),
-        description: `继承 SfcBase 的组件: ${componentName}`
+        entry: relativePath.replace(/\\/g, '/'), // 统一使用 / 分隔符
+        description: `继承 SfcBase 的组件: ${componentName} (${subDir || '根目录'})`
       });
+      log(`   ✅ 发现 ${componentName} (${subDir || '根目录'})`, 'green');
     } else {
-      log(`   ⊙ 跳过 ${componentName}（未继承 SfcBase）`, 'yellow');
+      const subDir = path.dirname(relativePath).replace(/\\/g, '/');
+      log(`   ⊙ 跳过 ${componentName} (${subDir || '根目录'}, 未继承 SfcBase)`, 'yellow');
     }
   }
 
