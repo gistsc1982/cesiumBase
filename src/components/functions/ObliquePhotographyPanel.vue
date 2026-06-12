@@ -15,7 +15,7 @@
     @expand="handleExpand"
   >
     <!-- 推荐偏移值提示 -->
-    <template v-for="item in list" :key="'recommend-' + item.id">
+    <template v-for="item in obliquePhotographyList" :key="'recommend-' + item.id">
       <div
         v-if="item && item.loaded && item.recommendedOffset !== undefined && item.recommendedOffset !== null"
         class="recommended-offset-banner"
@@ -29,7 +29,7 @@
             </span>
           </span>
           <button
-            @click="$emit('applyRecommendedOffset', item)"
+            @click="applyRecommendedOffset(item)"
             class="apply-recommended-btn"
             :disabled="Math.abs(item.heightOffset - item.recommendedOffset) < 0.1"
           >
@@ -40,7 +40,7 @@
     </template>
 
     <!-- 地形高度调整控件 -->
-    <template v-for="item in list" :key="'height-' + item.id">
+    <template v-for="item in obliquePhotographyList" :key="'height-' + item.id">
       <div v-if="item && item.loaded" class="oblique-height-control-panel">
         <div class="height-control-title">🌏 {{ item.name }} 地形高度调整</div>
 
@@ -60,7 +60,7 @@
             max="2000"
             step="1"
             :value="item.heightOffset || 0"
-            @input="$emit('heightOffsetChange', { item, value: $event.target.value })"
+            @input="onHeightOffsetChange(item, $event)"
             class="height-slider"
           />
           <div class="height-usage-info">
@@ -74,7 +74,7 @@
           <input
             type="number"
             :value="item.heightOffset || 0"
-            @change="$emit('heightInputChange', { item, value: $event.target.value })"
+            @change="onHeightInputChange(item, $event)"
             class="number-input"
             step="0.1"
           />
@@ -84,7 +84,7 @@
 
     <!-- 无加载提示 -->
     <div
-      v-if="list && list.length > 0 && !list.some(i => i && i.loaded)"
+      v-if="obliquePhotographyList && obliquePhotographyList.length > 0 && !obliquePhotographyList.some(i => i && i.loaded)"
       class="no-loaded-hint"
     >
       请先加载倾斜摄影数据
@@ -92,13 +92,13 @@
 
     <!-- 倾斜摄影列表 -->
     <div class="oblique-list">
-      <template v-for="item in list" :key="item && item.id">
+      <template v-for="item in obliquePhotographyList" :key="item && item.id">
         <div class="oblique-item" v-if="item">
           <label class="oblique-checkbox">
             <input
               type="checkbox"
               :checked="item.loaded || false"
-              @change="$emit('toggle', item)"
+              @change="toggleObliquePhotography(item)"
               :disabled="item.loading || false"
             />
             <span class="oblique-name">{{ item.name || '未知' }}</span>
@@ -115,12 +115,14 @@
 
 <script>
 import FunctionPanelUIBase from '../functionPanelUIBase.vue';
+import SfcBase from '../SfcBase.vue';
 
 /**
  * ObliquePhotographyPanel - 倾斜摄影功能面板
  *
- * 使用 FunctionPanelUIBase 作为容器，只实现业务逻辑：
+ * 使用 FunctionPanelUIBase 作为容器，实现完整的倾斜摄影加载和管理功能：
  * - 列表展示
+ * - 加载/卸载倾斜摄影
  * - 高度偏移调整
  * - 推荐偏移值应用
  */
@@ -129,16 +131,7 @@ export default {
   components: {
     FunctionPanelUIBase
   },
-  props: {
-    list: {
-      type: Array,
-      default: () => []
-    },
-    onClose: {
-      type: Function,
-      default: null
-    }
-  },
+  mixins: [SfcBase],  // 继承 SfcBase 以获得 initCesium、getCesiumViewer 等方法
   inject: {
     closeEventName: {
       default: 'obliquePhotographyPanelClose'
@@ -149,10 +142,54 @@ export default {
   },
   data() {
     return {
-      componentName: 'ObliquePhotographyPanel'
+      componentName: 'ObliquePhotographyPanel',
+      // 倾斜摄影列表配置
+      obliquePhotographyList: [
+        {
+          id: 'bridge3d',
+          name: '桥梁3D',
+          url: 'https://wckj2020.obs.myhuaweicloud.com/wckj/senge/bridge3D/tileset.json',
+          loaded: false,
+          tileset: null,
+          heightOffset: 0.0,  // 高度偏移量（米），正值向上，负值向下
+          initialTransform: null,  // 保存初始变换矩阵，用于计算相对偏移
+          recommendedOffset: null,  // 推荐的高度偏移值（基于地形高度计算）
+          loading: false  // 加载状态
+        },
+        {
+          id: 'jian1',
+          name: '吉安1号',
+          url: 'https://wckj2020.obs.cn-south-1.myhuaweicloud.com/wckj/senge/wckj2_merge/Scene/JiAn1_merge.json',
+          loaded: false,
+          tileset: null,
+          heightOffset: 0.0,
+          initialTransform: null,
+          recommendedOffset: null,
+          loading: false
+        }
+      ],
+      // Cesium 对象引用
+      cesiumViewer: null,
+      Cesium: null
     };
   },
+  mounted() {
+    // 在面板挂载后初始化 Cesium
+    this.initCesium(() => {
+      console.log(`[${this.componentName}] Cesium 已就绪，面板初始化完成`);
+    });
+  },
+  beforeUnmount() {
+    // 清理：卸载所有倾斜摄影
+    this.obliquePhotographyList.forEach(item => {
+      if (item.loaded && item.tileset) {
+        this.unloadObliquePhotography(item);
+      }
+    });
+  },
   methods: {
+    // ==================== 面板事件处理 ====================
+
     /**
      * 处理最小化事件
      */
@@ -171,25 +208,267 @@ export default {
      * 处理关闭事件
      */
     handleClose() {
-      // 触发 Vue 事件（父组件通过 @close 监听）
+      console.log(`[${this.componentName}] 面板关闭`);
+      // 只触发 Vue close 事件，避免 window 事件循环
       this.$emit('close');
+    },
 
-      // 触发 window 自定义事件
-      if (typeof window !== 'undefined') {
-        const closeEvent = new CustomEvent(this.closeEventName, {
-          detail: {
-            componentName: this.componentName,
-            instanceId: this.instanceId
-          }
+    // ==================== 倾斜摄影加载/卸载 ====================
+
+    /**
+     * 切换倾斜摄影加载状态
+     * @param {Object} item - 倾斜摄影项目配置
+     */
+    async toggleObliquePhotography(item) {
+      const viewer = this.getCesiumViewer();
+      if (!viewer) {
+        console.error(`[${this.componentName}] Cesium Viewer 未初始化`);
+        return;
+      }
+
+      if (item.loaded) {
+        // 卸载倾斜摄影
+        await this.unloadObliquePhotography(item);
+      } else {
+        // 加载倾斜摄影
+        await this.loadObliquePhotography(item);
+      }
+    },
+
+    /**
+     * 加载倾斜摄影
+     * @param {Object} item - 倾斜摄影项目配置
+     */
+    async loadObliquePhotography(item) {
+      const viewer = this.getCesiumViewer();
+      const Cesium = this.getCesium();
+
+      if (!viewer || !Cesium) {
+        console.error(`[${this.componentName}] Cesium 未就绪`);
+        return;
+      }
+
+      console.log(`[${this.componentName}] 🏗️ 加载倾斜摄影: ${item.name}`);
+      console.log(`[${this.componentName}] 📍 URL: ${item.url}`);
+
+      // 设置加载状态
+      this.$set(item, 'loading', true);
+
+      try {
+        // 创建 3D Tileset
+        const tileset = new Cesium.Cesium3DTileset({
+          url: item.url,
+          show: true,
+          // 细节层次优化配置
+          maximumScreenSpaceError: 2,  // 降低SSE值，提高模型清晰度
+          skipLevelOfDetail: true,
+          baseScreenSpaceError: 1024,
+          skipScreenSpaceErrorFactor: 16,
+          skipLevels: 1,
+          immediatelyLoadDesiredLevelOfDetail: true,
+          loadSiblings: false
         });
-        window.dispatchEvent(closeEvent);
 
-        if (this.onClose && typeof this.onClose === 'function') {
-          this.onClose();
+        // 添加到场景
+        viewer.scene.primitives.add(tileset);
+
+        // 监听加载完成
+        const handleReady = () => {
+          console.log(`[${this.componentName}] ✅ 倾斜摄影加载完成: ${item.name}`);
+
+          // 获取边界球信息
+          if (tileset.boundingSphere) {
+            const sphere = tileset.boundingSphere;
+            console.log(`[${this.componentName}] 📊 ${item.name} 边界球:`, {
+              中心X: sphere.center.x.toFixed(2),
+              中心Y: sphere.center.y.toFixed(2),
+              中心Z: sphere.center.z.toFixed(2),
+              半径: sphere.radius.toFixed(2) + '米'
+            });
+          }
+
+          // 更新状态
+          this.$set(item, 'loading', false);
+          this.$set(item, 'loaded', true);
+          this.$set(item, 'tileset', tileset);
+
+          // 保存初始变换矩阵
+          if (tileset.root && tileset.root.transform) {
+            this.$set(item, 'initialTransform', Cesium.Matrix4.clone(tileset.root.transform));
+            console.log(`[${this.componentName}] 💾 已保存初始变换矩阵: ${item.name}`);
+          }
+
+          // 自动定位到倾斜摄影位置（如果是第一个加载的）
+          const hasOtherLoaded = this.obliquePhotographyList.some(i => i.id !== item.id && i.loaded);
+          if (!hasOtherLoaded && tileset.boundingSphere) {
+            viewer.camera.flyToBoundingSphere(tileset.boundingSphere, {
+              duration: 2,
+              offset: new Cesium.HeadingPitchRange(
+                0,
+                -45,
+                tileset.boundingSphere.radius * 2.0
+              )
+            });
+            console.log(`[${this.componentName}] ✅ 自动定位到倾斜摄影位置: ${item.name}`);
+          }
+        };
+
+        const handleError = (error) => {
+          console.error(`[${this.componentName}] ❌ 倾斜摄影加载失败: ${item.name}`, error);
+          this.$set(item, 'loading', false);
+          this.$set(item, 'loaded', false);
+        };
+
+        // 监听 readyPromise
+        if (tileset.readyPromise) {
+          if (typeof Promise !== 'undefined' && tileset.readyPromise instanceof Promise) {
+            tileset.readyPromise.then(handleReady).catch(handleError);
+          } else if (typeof tileset.readyPromise.then === 'function') {
+            tileset.readyPromise.then(handleReady);
+            if (typeof tileset.readyPromise.otherwise === 'function') {
+              tileset.readyPromise.otherwise(handleError);
+            }
+          }
         }
 
-        console.log(`[${this.componentName}] 关闭事件已触发`);
+        // 监听 tileFailed 事件
+        if (tileset.tileFailed) {
+          tileset.tileFailed.addEventListener(handleError);
+        }
+
+      } catch (error) {
+        console.error(`[${this.componentName}] ❌ 倾斜摄影加载失败: ${item.name}`, error);
+        this.$set(item, 'loading', false);
+        this.$set(item, 'loaded', false);
       }
+    },
+
+    /**
+     * 卸载倾斜摄影
+     * @param {Object} item - 倾斜摄影项目配置
+     */
+    unloadObliquePhotography(item) {
+      const viewer = this.getCesiumViewer();
+      if (!viewer) {
+        console.error(`[${this.componentName}] Cesium Viewer 未初始化`);
+        return;
+      }
+
+      console.log(`[${this.componentName}] 🗑️ 卸载倾斜摄影: ${item.name}`);
+
+      if (item.tileset) {
+        try {
+          // 从场景中移除
+          viewer.scene.primitives.remove(item.tileset);
+
+          // 清空引用
+          this.$set(item, 'tileset', null);
+          this.$set(item, 'loaded', false);
+
+          console.log(`[${this.componentName}] ✅ 倾斜摄影已卸载: ${item.name}`);
+        } catch (error) {
+          console.error(`[${this.componentName}] ❌ 倾斜摄影卸载失败: ${item.name}`, error);
+        }
+      }
+    },
+
+    // ==================== 高度偏移调整 ====================
+
+    /**
+     * 处理高度偏移滑块变化
+     * @param {Object} item - 倾斜摄影项目配置
+     * @param {Event} event - 输入事件
+     */
+    onHeightOffsetChange(item, event) {
+      const newValue = parseFloat(event.target.value);
+      this.$set(item, 'heightOffset', newValue);
+      console.log(`[${this.componentName}] 📏 ${item.name} 高度偏移调整为: ${newValue.toFixed(1)} 米`);
+      // 实时应用高度偏移
+      this.applyObliqueHeightOffset(item);
+    },
+
+    /**
+     * 处理高度输入框变化
+     * @param {Object} item - 倾斜摄影项目配置
+     * @param {Event} event - 输入事件
+     */
+    onHeightInputChange(item, event) {
+      const newValue = parseFloat(event.target.value);
+      if (isNaN(newValue)) return;
+
+      this.$set(item, 'heightOffset', newValue);
+      console.log(`[${this.componentName}] 📏 ${item.name} 高度偏移设置为: ${newValue.toFixed(1)} 米`);
+      this.applyObliqueHeightOffset(item);
+    },
+
+    /**
+     * 应用高度偏移到倾斜摄影
+     * @param {Object} item - 倾斜摄影项目配置
+     */
+    applyObliqueHeightOffset(item) {
+      const viewer = this.getCesiumViewer();
+      const Cesium = this.getCesium();
+
+      if (!viewer || !Cesium || !item.tileset || !item.loaded) {
+        console.warn(`[${this.componentName}] ⚠️ 倾斜摄影未加载，无法应用高度偏移: ${item.name}`);
+        return;
+      }
+
+      if (!item.initialTransform) {
+        console.warn(`[${this.componentName}] ⚠️ 未找到初始变换矩阵，无法应用相对偏移: ${item.name}`);
+        return;
+      }
+
+      console.log(`[${this.componentName}] 🔧 应用高度偏移到 ${item.name}: ${item.heightOffset.toFixed(1)} 米`);
+
+      try {
+        const tileset = item.tileset;
+
+        // 基于初始变换矩阵计算新的变换（不累加）
+        if (tileset.root) {
+          const root = tileset.root;
+
+          // 克隆初始变换矩阵
+          const transform = Cesium.Matrix4.clone(item.initialTransform);
+
+          // 从变换矩阵中提取平移部分
+          const position = new Cesium.Cartesian3();
+          Cesium.Matrix4.getTranslation(item.initialTransform, position);
+
+          // 检查位置是否有效
+          const magnitude = Cesium.Cartesian3.magnitude(position);
+          if (!isFinite(magnitude) || magnitude === 0) {
+            console.warn(`[${this.componentName}] ⚠️ 从变换矩阵提取的位置无效: ${item.name}`);
+            return;
+          }
+
+          // 计算新的位置（在局部坐标系中应用高度偏移）
+          // 注意：这里使用简化的处理方式，直接在 Z 轴方向偏移
+          const offset = new Cesium.Cartesian3(0, 0, item.heightOffset);
+          const translation = Cesium.Matrix4.fromTranslation(offset);
+          Cesium.Matrix4.multiply(transform, translation, transform);
+          root.transform = transform;
+
+          console.log(`[${this.componentName}] ✅ ${item.name} 高度偏移已应用`);
+        }
+      } catch (error) {
+        console.error(`[${this.componentName}] ❌ 应用高度偏移失败: ${item.name}`, error);
+      }
+    },
+
+    /**
+     * 应用推荐偏移值
+     * @param {Object} item - 倾斜摄影项目配置
+     */
+    applyRecommendedOffset(item) {
+      if (item.recommendedOffset === null || item.recommendedOffset === undefined) {
+        console.warn(`[${this.componentName}] ⚠️ ${item.name} 没有推荐偏移值`);
+        return;
+      }
+
+      console.log(`[${this.componentName}] 🎯 应用推荐偏移值: ${item.name} = ${item.recommendedOffset.toFixed(1)} 米`);
+      this.$set(item, 'heightOffset', item.recommendedOffset);
+      this.applyObliqueHeightOffset(item);
     }
   }
 };

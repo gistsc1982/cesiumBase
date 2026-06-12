@@ -4,12 +4,95 @@
 
 本文档说明如何使用面板组件自注册功能，让 `FunctionPanelUIBase` 的子类能够自动注册到父组件（如 `CesiumMain.vue`）中。
 
+## ⭐ 新功能：自动发现与渲染（推荐）
+
+CesiumMain 现在支持**自动发现** `functions` 目录下的面板组件并自动渲染，无需手动导入和声明。
+
+### 工作原理
+
+```
+1. 将面板组件放入 cesiumBase/src/components/functions/ 目录
+2. 在组件中启用 auto-register="true"
+3. CesiumMain 自动通过 import.meta.glob 导入
+4. 组件挂载时自动注册到 CesiumMain
+5. CesiumMain 动态渲染所有已注册的面板
+```
+
+### 使用方法（三步完成）
+
+#### 步骤 1：创建面板组件
+
+在 `cesiumBase/src/components/functions/` 目录下创建你的面板文件：
+
+```vue
+<!-- MyFeaturePanel.vue -->
+<template>
+  <FunctionPanelUIBase
+    title="我的功能"
+    title-icon="⭐"
+    :auto-register="true"
+    registration-key="MyFeaturePanel"
+  >
+    <div>面板内容</div>
+  </FunctionPanelUIBase>
+</template>
+
+<script>
+import FunctionPanelUIBase from '../functionPanelUIBase.vue';
+
+export default {
+  name: 'MyFeaturePanel',
+  components: { FunctionPanelUIBase }
+};
+</script>
+```
+
+#### 步骤 2：确保组件命名正确
+
+组件必须有正确的 `name` 属性（用于自动识别）：
+
+```javascript
+export default {
+  name: 'MyFeaturePanel', // ✅ 必须与文件名一致（PascalCase）
+  // ...
+};
+```
+
+#### 步骤 3：完成！
+
+**无需其他操作**：
+- ❌ 不需要在 CesiumMain.vue 中导入
+- ❌ 不需要在 components 中声明
+- ❌ 不需要在 template 中添加标签
+- ✅ CesiumMain 会自动发现、导入和渲染
+
+### 验证自动加载
+
+打开浏览器控制台，查看日志：
+
+```
+[CesiumMain] 📦 自动加载面板组件: MyFeaturePanel (./functions/MyFeaturePanel.vue)
+[FunctionPanelUIBase] MyFeaturePanel 已通过 inject 注册
+```
+
+### 可见性控制
+
+面板默认可见。如需控制初始可见状态，在父组件中：
+
+```javascript
+// 在 CesiumMain 的 data 中
+registeredPanels: {
+  MyFeaturePanel: { visible: false } // 默认隐藏
+}
+```
+
 ## 工作原理
 
 自注册机制基于 Vue 的 `provide/inject` API：
 
-1. **父组件（CesiumMain.vue）**：通过 `provide` 提供注册方法
+1. **父组件（CesiumMain.vue）**：通过 `provide` 提供注册方法，并自动导入 `functions` 目录下的组件
 2. **子组件（如 ObliquePhotographyPanel）**：通过 `inject` 获取注册方法，在 `mounted` 时自动调用
+3. **动态渲染**：CesiumMain 使用 `<component :is="...">` 动态渲染所有可见的已注册面板
 
 ## 文件结构
 
