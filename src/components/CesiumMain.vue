@@ -393,6 +393,9 @@ export default {
     };
   },
   beforeCreate() {
+    // ⚡ 性能优化：使用非响应式Map存储Cesium对象，避免Vue响应式包装
+    this._cesiumEntities = new Map();  // 存储Cesium Entity对象
+
     // ⚠️ 重要：SyncManager 现在由 DualCanvasViewer 插件管理
     // 使用 getter 方法动态获取，避免初始化顺序问题
     Object.defineProperty(this, 'syncManager', {
@@ -512,8 +515,7 @@ export default {
         defaultHeight: 0  // ⭐ 新增：动态默认高度，从模型海拔获取
         // mercatorProj 已移除 - 通过 getter 访问，避免 Vue 3 响应式代理问题
       },
-      // Cesium 圆柱体标记引用（用于地板高度变化时更新位置）
-      groundMarkerCylinder: null,
+      // ⚡ 性能优化：Cesium Entity存储在非响应式Map中，不再定义groundMarkerCylinder
       // 圆柱体高度控制
       cylinderHeight: 569,  // 默认圆柱体高度（米）
       groundMarkerInfo: null,  // 存储地面标记的经纬度信息，用于刷新
@@ -1243,211 +1245,111 @@ export default {
           if (useLocalCoordSystem) {
             console.log('[HelloWorld] ✅ 检测到局部坐标系模式，floorCenterMercator 应为 (0, 0, 0)');
 
-            // ⭐ 加载倾斜摄影数据（3D Tiles）
-            // 数据源：wuce 项目中的 bridge3D 数据
-            // 用于获取倾斜摄影表面高度，调整模型海拔
-            console.log('[HelloWorld] 🏗️ 局部坐标系模式：加载倾斜摄影数据（3D Tiles）');
+            // ⭐ 注意：倾斜摄影加载功能已迁移到 ObliquePhotographyPanel 组件
+            // 不再在此处加载倾斜摄影数据
 
-            const obliquePhotographyUrl = 'https://wckj2020.obs.myhuaweicloud.com/wckj/senge/bridge3D/tileset.json';
+            // ⭐ 等待倾斜摄影加载完成并采样实际地形高度
+            setTimeout(async () => {
+              try {
+                const dualViewer = window.__dualCanvasViewerInstances?.[0];
+                if (!dualViewer) {
+                  console.warn('[HelloWorld] ⚠️ DualCanvasViewer 不可用，跳过地形高度采样');
+                  return;
+                }
 
-            // 创建 3D Tileset
-            this.obliqueTileset = new this.Cesium.Cesium3DTileset({
-              url: obliquePhotographyUrl,
-              show: true,  // 确保可见
-              maximumScreenSpaceError: 16  // 控制加载精度
-            });
+                // 获取大坐标模型的地理位置
+                const largeModel = dualViewer.modelGroup1?.children.find(m =>
+                  m.userData?.originalLocation?.cartographic
+                );
 
-            this.cesiumViewer.scene.primitives.add(this.obliqueTileset);
+                if (!largeModel) {
+                  console.warn('[HelloWorld] ⚠️ 找不到大坐标模型，跳过地形高度采样');
+                  return;
+                }
 
-            console.log('[HelloWorld] 🔍 倾斜摄影 Tileset 已添加到场景');
-            console.log('[HelloWorld] 📍 Tileset URL:', obliquePhotographyUrl);
-            console.log('[HelloWorld] 🔍 场景中的 primitives 数量:', this.cesiumViewer.scene.primitives.length);
+                const cartographic = largeModel.userData.originalLocation.cartographic;
+                const modelAltitude = cartographic.height;
 
-            // 监听 tileset 准备完成
-            // Cesium 1.81 的 readyPromise 可能不是标准 Promise，使用更安全的方式
-            const handleTilesetReady = () => {
-              console.log('[HelloWorld] ✅ 倾斜摄影数据加载完成');
-              console.log('[HelloWorld] 📍 数据源:', obliquePhotographyUrl);
+                console.log('[HelloWorld] 🔄 多次尝试采样地形高度...');
 
-              // 获取 tileset 边界球信息
-              if (this.obliqueTileset.boundingSphere) {
-                const sphere = this.obliqueTileset.boundingSphere;
-                console.log('[HelloWorld] 📊 倾斜摄影边界球:', {
-                  中心X: sphere.center.x.toFixed(2),
-                  中心Y: sphere.center.y.toFixed(2),
-                  中心Z: sphere.center.z.toFixed(2),
-                  半径: sphere.radius.toFixed(2) + '米'
-                });
+                let actualTerrainHeight = 0;
+                let sampleSuccess = false;
 
-                // ⭐ 修改：根据配置决定是否自动定位到倾斜摄影位置
-                if (this.obliquePhotography.autoLocate) {
-                  this.cesiumViewer.camera.flyToBoundingSphere(sphere, {
-                    duration: 2,
-                    offset: new this.Cesium.HeadingPitchRange(
-                      0,
-                      -45,  // 俯仰角
-                      sphere.radius * 2.0  // 距离
-                    )
+                // 方法1：直接采样模型位置的地形高度
+                const position = this.Cesium.Cartographic.fromRadians(
+                  cartographic.longitude,
+                  cartographic.latitude,
+                  0
+                );
+
+                const heights = await this.cesiumViewer.scene.sampleHeightMostDetailed([position]);
+                if (heights && heights[0] !== undefined && !isNaN(heights[0])) {
+                  const sampledHeight = heights[0];
+                  if (sampledHeight >= -500 && sampledHeight <= 9000) {
+                    actualTerrainHeight = sampledHeight;
+                    sampleSuccess = true;
+                    console.log('[HelloWorld] ✅ 方法1成功：直接采样地形高度 =', actualTerrainHeight.toFixed(2) + '米');
+                  }
+                }
+
+                // 方法2：如果直接采样失败，尝试采样多个点
+                if (!sampleSuccess) {
+                  console.log('[HelloWorld] 🔄 方法1失败，尝试多区域采样...');
+                  const samplePoints = [
+                    [cartographic.longitude, cartographic.latitude],
+                    [cartographic.longitude + 0.0001, cartographic.latitude],
+                    [cartographic.longitude, cartographic.latitude + 0.0001],
+                    [cartographic.longitude - 0.0001, cartographic.latitude],
+                    [cartographic.longitude, cartographic.latitude - 0.0001]
+                  ];
+
+                  for (let i = 0; i < samplePoints.length; i++) {
+                    const pos = this.Cesium.Cartographic.fromRadians(
+                      samplePoints[i][0],
+                      samplePoints[i][1],
+                      0
+                    );
+
+                    const h = await this.cesiumViewer.scene.sampleHeightMostDetailed([pos]);
+                    if (h && h[0] !== undefined && !isNaN(h[0]) && h[0] > 0 && h[0] < 9000) {
+                      actualTerrainHeight = h[0];
+                      sampleSuccess = true;
+                      console.log('[HelloWorld] ✅ 方法2成功：多区域采样成功 =', actualTerrainHeight.toFixed(2) + '米');
+                      break;
+                    }
+                  }
+                }
+
+                if (sampleSuccess && actualTerrainHeight !== 0) {
+                  console.log('[HelloWorld] 🎯 获取到实际地形高度:', actualTerrainHeight.toFixed(2) + '米', {
+                    模型海拔: modelAltitude.toFixed(2) + '米',
+                    高度差: (modelAltitude - actualTerrainHeight).toFixed(2) + '米'
                   });
-                  console.log('[HelloWorld] ✅ 相机正在飞向倾斜摄影位置');
+
+                  // 获取 mercatorProjectionManager 实例
+                  const mercatorProj = window.__mercatorProjectionManager__ || dualViewer.mercatorProj;
+                  if (mercatorProj && mercatorProj.setDualFloorHeightToTerrain) {
+                    // 更新dual地板高度到实际地形高度
+                    mercatorProj.setDualFloorHeightToTerrain(actualTerrainHeight);
+
+                    // 更新地板控制面板
+                    if (this.floorHeight !== actualTerrainHeight) {
+                      this.floorHeight = actualTerrainHeight;
+                    }
+
+                    // 触发dual地板更新
+                    dualViewer.updateAnchorContainerPosition?.();
+                    dualViewer.$forceUpdate?.();
+
+                    console.log('[HelloWorld] ✅ 模型已对齐到实际地形');
+                  }
                 } else {
-                  console.log('[HelloWorld] ℹ️ 跳过自动定位到倾斜摄影位置（autoLocate = false）');
+                  console.log('[HelloWorld] ℹ️ 所有采样方法失败，保持椭球体表面（height=0）');
                 }
+              } catch (error) {
+                console.error('[HelloWorld] ❌ 地形采样失败:', error.message);
               }
-
-              // ⭐ 倾斜摄影加载完成后，尝试采样实际地形高度并调整模型位置
-              // 同时使用倾斜摄影边界球中心作为备用参考
-              setTimeout(async () => {
-                try {
-                  const dualViewer = window.__dualCanvasViewerInstances?.[0];
-                  if (!dualViewer) {
-                    console.warn('[HelloWorld] ⚠️ DualCanvasViewer 不可用，跳过地形高度采样');
-                    return;
-                  }
-
-                  // 获取大坐标模型的地理位置
-                  const largeModel = dualViewer.modelGroup1?.children.find(m =>
-                    m.userData?.originalLocation?.cartographic
-                  );
-
-                  if (!largeModel) {
-                    console.warn('[HelloWorld] ⚠️ 找不到大坐标模型，跳过地形高度采样');
-                    return;
-                  }
-
-                  const cartographic = largeModel.userData.originalLocation.cartographic;
-                  const modelAltitude = cartographic.height;
-
-                  console.log('[HelloWorld] 🔄 多次尝试采样倾斜摄影地形高度...');
-
-                  let actualTerrainHeight = 0;
-                  let sampleSuccess = false;
-
-                  // 方法1：直接采样模型位置的地形高度
-                  const position = this.Cesium.Cartographic.fromRadians(
-                    cartographic.longitude,
-                    cartographic.latitude,
-                    0
-                  );
-
-                  const heights = await this.cesiumViewer.scene.sampleHeightMostDetailed([position]);
-                  if (heights && heights[0] !== undefined && !isNaN(heights[0])) {
-                    const sampledHeight = heights[0];
-                    if (sampledHeight >= -500 && sampledHeight <= 9000) {
-                      actualTerrainHeight = sampledHeight;
-                      sampleSuccess = true;
-                      console.log('[HelloWorld] ✅ 方法1成功：直接采样地形高度 =', actualTerrainHeight.toFixed(2) + '米');
-                    }
-                  }
-
-                  // 方法2：如果直接采样失败，尝试使用倾斜摄影边界球中心
-                  if (!sampleSuccess && this.obliqueTileset && this.obliqueTileset.boundingSphere) {
-                    const sphere = this.obliqueTileset.boundingSphere;
-                    const center = sphere.center;
-                    const cartographicCenter = this.Cesium.Cartographic.fromCartesian(center);
-
-                    if (cartographicCenter) {
-                      actualTerrainHeight = cartographicCenter.height;
-                      sampleSuccess = true;
-                      console.log('[HelloWorld] ✅ 方法2成功：使用倾斜摄影边界球中心高度 =', actualTerrainHeight.toFixed(2) + '米');
-                    }
-                  }
-
-                  // 方法3：如果都失败，尝试采样倾斜摄影区域内的多个点
-                  if (!sampleSuccess) {
-                    console.log('[HelloWorld] 🔄 方法1和2失败，尝试多区域采样...');
-                    const samplePoints = [
-                      [cartographic.longitude, cartographic.latitude],
-                      [cartographic.longitude + 0.0001, cartographic.latitude],
-                      [cartographic.longitude, cartographic.latitude + 0.0001],
-                      [cartographic.longitude - 0.0001, cartographic.latitude],
-                      [cartographic.longitude, cartographic.latitude - 0.0001]
-                    ];
-
-                    for (let i = 0; i < samplePoints.length; i++) {
-                      const pos = this.Cesium.Cartographic.fromRadians(
-                        samplePoints[i][0],
-                        samplePoints[i][1],
-                        0
-                      );
-
-                      const h = await this.cesiumViewer.scene.sampleHeightMostDetailed([pos]);
-                      if (h && h[0] !== undefined && !isNaN(h[0]) && h[0] > 0 && h[0] < 9000) {
-                        actualTerrainHeight = h[0];
-                        sampleSuccess = true;
-                        console.log('[HelloWorld] ✅ 方法3成功：多区域采样成功 =', actualTerrainHeight.toFixed(2) + '米');
-                        break;
-                      }
-                    }
-                  }
-
-                  if (sampleSuccess && actualTerrainHeight !== 0) {
-                    console.log('[HelloWorld] 🎯 获取到实际地形高度:', actualTerrainHeight.toFixed(2) + '米', {
-                      模型海拔: modelAltitude.toFixed(2) + '米',
-                      高度差: (modelAltitude - actualTerrainHeight).toFixed(2) + '米'
-                    });
-
-                    // ⭐ 计算推荐的倾斜摄影偏移值
-                    // 目标：将倾斜摄影从当前地形高度抬升，使其与模型底部对齐
-                    // 推荐偏移 = 模型海拔 - 地形高度
-                    const recommendedOffset = modelAltitude - actualTerrainHeight;
-                    console.log('[HelloWorld] 📏 推荐的倾斜摄影偏移值:', recommendedOffset.toFixed(2) + '米', {
-                      说明: '将倾斜摄影向上抬升此数值，使其与模型底部对齐'
-                    });
-
-                    // ⭐ 注意：obliquePhotographyList 已迁移到 ObliquePhotographyPanel
-                    // 推荐偏移值需要通过事件或其他方式通知面板组件
-
-                    // 获取 mercatorProjectionManager 实例
-                    const mercatorProj = window.__mercatorProjectionManager__ || dualViewer.mercatorProj;
-                    if (mercatorProj && mercatorProj.setDualFloorHeightToTerrain) {
-                      // 更新dual地板高度到实际地形高度
-                      mercatorProj.setDualFloorHeightToTerrain(actualTerrainHeight);
-
-                      // 更新地板控制面板
-                      if (this.floorHeight !== actualTerrainHeight) {
-                        this.floorHeight = actualTerrainHeight;
-                      }
-
-                      // 触发dual地板更新
-                      dualViewer.updateAnchorContainerPosition?.();
-                      dualViewer.$forceUpdate?.();
-
-                      console.log('[HelloWorld] ✅ 模型已对齐到实际地形（3D Tiles表面）');
-                    }
-                  } else {
-                    console.log('[HelloWorld] ℹ️ 所有采样方法失败，保持椭球体表面（height=0）');
-                  }
-                } catch (error) {
-                  console.error('[HelloWorld] ❌ 地形采样失败:', error.message);
-                }
-              }, 2000); // 延迟2秒确保倾斜摄影完全加载
-            };
-
-            const handleTilesetError = (error) => {
-              console.error('[HelloWorld] ❌ 倾斜摄影数据加载失败:', error);
-            };
-
-            // 尝试使用 readyPromise
-            if (this.obliqueTileset.readyPromise) {
-              if (typeof Promise !== 'undefined' && this.obliqueTileset.readyPromise instanceof Promise) {
-                this.obliqueTileset.readyPromise.then(handleTilesetReady).catch(handleTilesetError);
-              } else if (typeof this.obliqueTileset.readyPromise.then === 'function') {
-                // 可能是 Cesium 的自定义 Promise
-                this.obliqueTileset.readyPromise.then(handleTilesetReady);
-                if (typeof this.obliqueTileset.readyPromise.otherwise === 'function') {
-                  this.obliqueTileset.readyPromise.otherwise(handleTilesetError);
-                }
-              } else {
-                // ready 已是 true 或其他情况
-                console.log('[HelloWorld] ✅ 倾斜摄影数据已就绪');
-              }
-            }
-
-            // 监听 tileset 加载失败事件
-            if (this.obliqueTileset.tileFailed) {
-              this.obliqueTileset.tileFailed.addEventListener(handleTilesetError);
-            }
+            }, 2000); // 延迟2秒等待倾斜摄影完全加载
 
             // ⭐ 关键修复：局部坐标系模式下，使用dual同步更新Cesium相机，而不是独立定位
             // 原因：独立定位到大坐标模型位置会导致高德地图返回空白图片
@@ -5078,8 +4980,9 @@ async loadTestSfcComponent(instanceId) {
           }
         });
 
-        // ⭐ 保存引用，用于后续更新
-        this.groundMarkerCylinder = cylinderEntity;
+        // ⚡ 性能优化：存储Cesium Entity到非响应式Map中
+        // 注意：不能冻结Entity对象，因为Cesium需要向其添加内部属性
+        this._cesiumEntities.set('groundMarker', cylinderEntity);
 
         console.log('[HelloWorld] ✅ 局部坐标系模式：已在 Cesium 地面添加黄色圆柱体标记', {
           经度: longitude.toFixed(8) + '°',
@@ -5111,10 +5014,7 @@ async loadTestSfcComponent(instanceId) {
       }
 
       try {
-        // 检查是否已加载倾斜摄影数据
-        const hasObliqueTileset = this.obliqueTileset && this.obliqueTileset.ready;
-
-        // 获取实际表面高度（从倾斜摄影表面或椭球体表面）
+        // 获取实际表面高度（从地形表面）
         const position = this.Cesium.Cartographic.fromRadians(
           longitude * Math.PI / 180,
           latitude * Math.PI / 180,
@@ -5122,30 +5022,15 @@ async loadTestSfcComponent(instanceId) {
         );
 
         // ⭐ sampleHeightMostDetailed 会自动采样所有场景内容
-        // 包括 3D Tiles（倾斜摄影）和地形
-        let actualSurfaceHeight = 0;
+        // 包括 3D Tiles（由ObliquePhotographyPanel管理）和地形
+        const heights = await this.cesiumViewer.scene.sampleHeightMostDetailed([position]);
+        let actualSurfaceHeight = (heights && heights[0] !== undefined && !isNaN(heights[0])) ? heights[0] : 0;
 
-        if (hasObliqueTileset) {
-          // 如果有倾斜摄影，sampleHeightMostDetailed 会采样其表面
-          const heights = await this.cesiumViewer.scene.sampleHeightMostDetailed([position]);
-          actualSurfaceHeight = (heights && heights[0] !== undefined && !isNaN(heights[0])) ? heights[0] : 0;
-
-          console.log('[HelloWorld] 📍 倾斜摄影表面采样:', {
-            经度: longitude.toFixed(6) + '°',
-            纬度: latitude.toFixed(6) + '°',
-            表面高度: actualSurfaceHeight.toFixed(2) + 'm',
-            数据源: '倾斜摄影（3D Tiles）'
-          });
-        } else {
-          // 如果没有倾斜摄影，使用椭球体表面（海平面）
-          actualSurfaceHeight = 0;
-
-          console.warn('[HelloWorld] ⚠️ 未加载倾斜摄影数据，使用椭球体表面（海平面）:', {
-            经度: longitude.toFixed(6) + '°',
-            纬度: latitude.toFixed(6) + '°',
-            表面高度: '0m'
-          });
-        }
+        console.log('[HelloWorld] 📍 地形表面采样:', {
+          经度: longitude.toFixed(6) + '°',
+          纬度: latitude.toFixed(6) + '°',
+          表面高度: actualSurfaceHeight.toFixed(2) + 'm'
+        });
 
         // 使用实际表面高度创建标注
         this.addGroundMarkerForLocalCoord(longitude, latitude, actualSurfaceHeight);
@@ -5228,8 +5113,10 @@ async loadTestSfcComponent(instanceId) {
       }
 
       // ⭐ 移除旧的圆柱体标记
-      if (this.groundMarkerCylinder) {
-        this.cesiumViewer.entities.remove(this.groundMarkerCylinder);
+      const groundMarker = this._cesiumEntities.get('groundMarker');
+      if (groundMarker) {
+        this.cesiumViewer.entities.remove(groundMarker);
+        this._cesiumEntities.delete('groundMarker');
         console.log('[HelloWorld] 🗑️ 已移除旧的圆柱体标记');
       }
 
@@ -5988,13 +5875,11 @@ async loadTestSfcComponent(instanceId) {
             return;
           }
 
-          // ⭐ 使用倾斜摄影表面采样获取真实地面高度
+          // ⭐ 使用地形表面采样获取真实地面高度
           let actualSurfaceHeight = 0;
-          // ⭐ 注意：倾斜摄影检查逻辑已迁移到面板组件
-          // 暂时禁用倾斜摄影表面采样
-          const hasObliqueTileset = false;
 
-          if (hasObliqueTileset && this.cesiumViewer) {
+          // ⭐ 直接采样地形表面（包括3D Tiles，由ObliquePhotographyPanel管理）
+          if (this.cesiumViewer) {
             try {
               // ⭐ cartographic 使用弧度，需要转换为度数
               const longitudeDeg = this.Cesium.Math.toDegrees(longitude);
@@ -6003,20 +5888,20 @@ async loadTestSfcComponent(instanceId) {
               const heights = await this.cesiumViewer.scene.sampleHeightMostDetailed([position]);
               actualSurfaceHeight = (heights && heights[0] !== undefined && !isNaN(heights[0])) ? heights[0] : 0;
 
-              console.log(`  📍 倾斜摄影表面采样:`, {
+              console.log(`  📍 地形表面采样:`, {
                 经度: longitudeDeg.toFixed(6) + '°',
                 纬度: latitudeDeg.toFixed(6) + '°',
                 表面高度: actualSurfaceHeight.toFixed(2) + 'm',
                 原始高度: originalAltitude?.toFixed(2) + 'm'
               });
             } catch (error) {
-              console.warn(`  ⚠️  倾斜摄影采样失败，使用原始高度:`, error);
+              console.warn(`  ⚠️  地形采样失败，使用原始高度:`, error);
               actualSurfaceHeight = originalAltitude || 0;
             }
           } else {
-            // 没有倾斜摄影，使用原始高度
+            // 没有Cesium Viewer，使用原始高度
             actualSurfaceHeight = originalAltitude || 0;
-            console.log(`  ℹ️  未加载倾斜摄影，使用原始高度: ${actualSurfaceHeight.toFixed(2)}m`);
+            console.log(`  ℹ️  未加载Cesium Viewer，使用原始高度: ${actualSurfaceHeight.toFixed(2)}m`);
           }
 
           if (!actualSurfaceHeight || actualSurfaceHeight <= 0) {
@@ -8211,17 +8096,8 @@ async loadTestSfcComponent(instanceId) {
       this._cesiumLayerRegistration = null;
     }
 
-    // 清理倾斜摄影（3D Tiles）
-    if (this.obliqueTileset) {
-      try {
-        this.cesiumViewer.scene.primitives.remove(this.obliqueTileset);
-        this.obliqueTileset.destroy();
-        console.log('[HelloWorld] ✅ 倾斜摄影数据已清理');
-      } catch (error) {
-        console.warn('[HelloWorld] ⚠️ 倾斜摄影数据清理失败（已忽略）:', error);
-      }
-      this.obliqueTileset = null;
-    }
+    // ⭐ 注意：倾斜摄影清理功能已迁移到 ObliquePhotographyPanel 组件
+    // 不再在此处清理倾斜摄影数据
   }
 };
 </script>
