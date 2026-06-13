@@ -231,6 +231,7 @@
 import FunctionPanelUIBase from '../functionPanelUIBase.vue';
 import SfcBase from '../SfcBase.vue';
 import ObliqueHeightAdjustPanel from './ObliqueHeightAdjustPanel.vue';
+import { panelSingletonManager } from '../utils/PanelSingletonManager.js';
 
 const JSON_FILE_PATH = '/data/gis/oblique-photography.json';
 
@@ -294,6 +295,7 @@ export default {
     this._cesiumTilesets = new Map();  // 存储Cesium3DTileset对象
     this._cesiumTransforms = new Map(); // 存储initialTransform
     this._cesiumHeightOffsets = new Map(); // 存储heightOffset
+    this._cesiumErrorHandlers = new Map(); // 存储错误处理器
   },
   computed: {
     /**
@@ -310,30 +312,81 @@ export default {
     }
   },
   mounted() {
+    // ⭐ 单例模式：检查是否有保存的状态
+    const savedState = panelSingletonManager.getPanelState(this.componentName);
+    if (savedState) {
+      console.log(`[${this.componentName}] 📦 恢复保存的状态（单例模式）`);
+
+      // 恢复 Cesium 对象
+      this._cesiumTilesets = savedState.cesiumTilesets;
+      this._cesiumTransforms = savedState.cesiumTransforms;
+      this._cesiumHeightOffsets = savedState.cesiumHeightOffsets;
+      this._cesiumErrorHandlers = savedState.cesiumErrorHandlers;
+
+      // 恢复倾斜摄影列表状态
+      this.obliquePhotographyList = savedState.obliquePhotographyList;
+
+      // 重新设置错误处理器（事件监听器需要重新绑定）
+      this._cesiumErrorHandlers.forEach((data, id) => {
+        if (data && data.tileset && data.tileset.tileFailed) {
+          data.tileset.tileFailed.addEventListener(data.errorHandler);
+        }
+      });
+    }
+
     this.initCesium(() => {
       console.log(`[${this.componentName}] Cesium 已就绪，面板初始化完成`);
     });
-    this.loadFromJson();
+
+    // 如果没有保存的状态，从 JSON 加载
+    if (!savedState) {
+      this.loadFromJson();
+    } else {
+      // 如果有保存的状态，重新将 Cesium 对象添加到场景
+      this.restoreCesiumObjects();
+    }
   },
   beforeUnmount() {
-    // ⚡ 性能优化：正确清理Cesium对象
-    this.obliquePhotographyList.forEach(item => {
-      if (item.loaded) {
-        this.unloadObliquePhotography(item);
-      }
+    // ⭐ 单例模式：保存面板状态到单例管理器
+    console.log(`[${this.componentName}] 💾 保存面板状态到单例管理器`);
+
+    // 保存面板状态到单例管理器
+    panelSingletonManager.savePanelState(this.componentName, {
+      cesiumTilesets: this._cesiumTilesets,
+      cesiumTransforms: this._cesiumTransforms,
+      cesiumHeightOffsets: this._cesiumHeightOffsets,
+      cesiumErrorHandlers: this._cesiumErrorHandlers,
+      obliquePhotographyList: this.obliquePhotographyList
     });
 
-    // ⚡ 清理所有非响应式Map
-    this._cesiumTilesets.clear();
-    this._cesiumTransforms.clear();
-    this._cesiumHeightOffsets.clear();
+    // ⚡ 清理事件监听器（避免内存泄漏）
     if (this._cesiumErrorHandlers) {
-      this._cesiumErrorHandlers.clear();
+      this._cesiumErrorHandlers.forEach((data, id) => {
+        if (data && data.tileset && data.tileset.tileFailed) {
+          data.tileset.tileFailed.removeEventListener(data.errorHandler);
+        }
+      });
     }
+
+    // ⚠️ 不清理以下数据，已保存到单例管理器：
+    // - obliquePhotographyList（保留loaded状态）
+    // - _cesiumTilesets（保留tileset对象）
+    // - _cesiumTransforms（保留transform对象）
+    // - _cesiumHeightOffsets（保留高度偏移）
   },
   methods: {
     handleClose() {
-      console.log(`[${this.componentName}] 面板关闭`);
+      console.log(`[${this.componentName}] 面板假关闭（单实例模式）`);
+      // ⭐ 触发自定义事件，通知父组件假关闭（不销毁组件）
+      if (typeof window !== 'undefined') {
+        const event = new CustomEvent('obliquePhotographyPanelFakeClose', {
+          detail: {
+            componentName: this.componentName,
+            preserveData: true
+          }
+        });
+        window.dispatchEvent(event);
+      }
       this.$emit('close');
     },
 
@@ -343,6 +396,44 @@ export default {
 
     handleExpand() {
       console.log(`[${this.componentName}] 面板已展开`);
+    },
+
+    // ==================== 单例模式状态恢复 ====================
+
+    /**
+     * 恢复 Cesium 对象到场景中
+     * 在面板重新打开时调用，将保存的 Cesium 对象重新添加到场景
+     */
+    restoreCesiumObjects() {
+      const viewer = this.getCesiumViewer();
+      if (!viewer) {
+        console.error(`[${this.componentName}] Cesium Viewer 未初始化，无法恢复 Cesium 对象`);
+        return;
+      }
+
+      console.log(`[${this.componentName}] 🔄 恢复 Cesium 对象到场景`);
+
+      let restoredCount = 0;
+      this._cesiumTilesets.forEach((tileset, id) => {
+        if (tileset && !tileset.isDestroyed()) {
+          // 检查 tileset 是否已经在场景中
+          if (!viewer.scene.primitives.contains(tileset)) {
+            viewer.scene.primitives.add(tileset);
+            restoredCount++;
+            console.log(`[${this.componentName}] ✅ 恢复 tileset: ${id}`);
+          } else {
+            console.log(`[${this.componentName}] ℹ️ tileset 已在场景中: ${id}`);
+          }
+
+          // 恢复 transform
+          const transform = this._cesiumTransforms.get(id);
+          if (transform) {
+            tileset.modelMatrix = transform;
+          }
+        }
+      });
+
+      console.log(`[${this.componentName}] ✅ 恢复完成，共恢复 ${restoredCount} 个 tileset`);
     },
 
     // ==================== JSON 数据管理 ====================
@@ -573,12 +664,13 @@ export default {
             this._cesiumTransforms.set(item.id, transform);
           }
 
-          const hasOtherLoaded = this.obliquePhotographyList.some(i => i.id !== item.id && i.loaded);
-          if (!hasOtherLoaded && tileset.boundingSphere) {
+          // ⭐ 自动定位到当前加载的倾斜摄影位置
+          if (tileset.boundingSphere) {
             viewer.camera.flyToBoundingSphere(tileset.boundingSphere, {
               duration: 2,
               offset: new Cesium.HeadingPitchRange(0, -45, tileset.boundingSphere.radius * 2.0)
             });
+            console.log(`[${this.componentName}] 🎯 已自动定位到 ${item.name}`);
           }
         };
 

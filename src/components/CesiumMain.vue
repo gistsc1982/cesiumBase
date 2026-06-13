@@ -759,6 +759,36 @@ export default {
       const instanceId = this.instanceId || 1;
       console.log(`[CesiumMain #${instanceId}] 注册面板组件: ${key}`, config);
 
+      // ⭐ ObliquePhotographyPanel 单实例模式检查
+      if (key === 'ObliquePhotographyPanel' && this.registeredPanels[key]) {
+        console.log(`[CesiumMain #${instanceId}] ⭐ ObliquePhotographyPanel 已存在，使用单实例模式（仅显示面板）`);
+
+        // ⚡ 清理旧的组件实例引用（已被销毁）
+        // 这样可以避免内存泄漏，并且确保使用新的组件实例
+        const oldComponent = this.registeredPanels[key].component;
+        if (oldComponent && oldComponent !== config.component) {
+          console.log(`[CesiumMain #${instanceId}] 🔄 清理旧的 ObliquePhotographyPanel 实例引用`);
+        }
+
+        // 更新为新的组件实例
+        this.registeredPanels[key].component = markRaw(config.component);
+
+        // 设置可见性
+        this.registeredPanels[key].visible = true;
+
+        // 更新位置配置（如果需要）
+        const instancePanelConfig = multiInstancePanelConfigManager.getPanelConfig(instanceId, key);
+        if (instancePanelConfig?.position) {
+          this.registeredPanels[key].props = {
+            ...this.registeredPanels[key].props,
+            ...instancePanelConfig.position
+          };
+        }
+
+        console.log(`[CesiumMain #${instanceId}] ✅ ObliquePhotographyPanel 已显示（保留已加载的倾斜摄影数据）`);
+        return;
+      }
+
       // ⭐ 从多实例配置管理器获取实例特定的配置
       const instancePanelConfig = multiInstancePanelConfigManager.getPanelConfig(instanceId, key);
 
@@ -822,6 +852,17 @@ export default {
     handlePanelClose(panelKey) {
       console.log(`[CesiumMain] 面板关闭: ${panelKey}`);
 
+      // ⭐ ObliquePhotographyPanel 特殊处理：假关闭模式
+      if (panelKey === 'ObliquePhotographyPanel') {
+        console.log(`[CesiumMain] ObliquePhotographyPanel 假关闭，保留实例状态`);
+        // 只设置 visible 为 false，不销毁组件
+        if (this.registeredPanels[panelKey]) {
+          this.registeredPanels[panelKey].visible = false;
+        }
+        return;
+      }
+
+      // 其他面板：正常关闭
       // 隐藏面板
       if (this.registeredPanels[panelKey]) {
         this.registeredPanels[panelKey].visible = false;
