@@ -1,0 +1,33 @@
+{
+  "name": "cesium-data-server",
+  "version": "1.0.0",
+  "description": "Cesium 配置文件数据服务器",
+  "main": "api-server.js",
+  "scripts": {
+    "start": "node api-server.js",
+    "dev": "nodemon api-server.js",
+    "sync": "node sqlite-db-manager.js export",
+    "import": "node sqlite-db-manager.js import",
+    "stats": "node sqlite-db-manager.js stats",
+    "init-db": "node sqlite-db-manager.js init"
+  },
+  "dependencies": {
+    "better-sqlite3": "^9.2.2",
+    "express": "^4.18.2",
+    "cors": "^2.8.5"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.1"
+  },
+  "engines": {
+    "node": ">=14.0.0"
+  },
+  "keywords": [
+    "cesium",
+    "config",
+    "sqlite",
+    "api"
+  ],
+  "author": "",
+  "license": "MIT"
+}

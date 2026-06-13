@@ -23,19 +23,25 @@
           </svg>
           添加
         </button>
-        <button @click="exportConfig" class="tool-btn export-btn" title="导出配置文件">
+
+        <!-- ⭐ 导出配置到服务器 JSON 文件（通过 HTTP API 写入 SQLite → 自动同步到 FTP 目录） -->
+        <button @click="exportConfig" class="tool-btn export-btn" title="导出配置到服务器 JSON 文件">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3" stroke-linecap="round" stroke-linejoin="round"/>
           </svg>
           导出
         </button>
-        <button @click="importConfig" class="tool-btn import-btn" title="导入配置文件">
+
+        <!-- ⭐ 从服务器 JSON 文件导入配置（通过 HTTP API 读取） -->
+        <button @click="importConfig" class="tool-btn import-btn" title="从服务器 JSON 文件导入配置">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12" stroke-linecap="round" stroke-linejoin="round"/>
           </svg>
           导入
         </button>
-        <button @click="refreshFromJson" class="tool-btn refresh-btn" title="从JSON文件刷新数据">
+
+        <!-- ⭐ 从服务器刷新 JSON 数据 -->
+        <button @click="refreshFromJson" class="tool-btn refresh-btn" title="从服务器刷新 JSON 数据">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M23 4v6h-6M1 20v-6h6" stroke-linecap="round" stroke-linejoin="round"/>
             <path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15" stroke-linecap="round" stroke-linejoin="round"/>
@@ -221,6 +227,110 @@
         </div>
       </Transition>
     </Teleport>
+
+    <!-- ⭐ 服务器文件浏览对话框（导入配置） -->
+    <Teleport to="body">
+      <Transition name="dialog-fade">
+        <div v-if="showImportDialog" class="dialog-overlay" @click.self="closeImportDialog">
+          <div class="dialog dialog-large" @click.stop>
+            <div class="dialog-header">
+              <h3 class="dialog-title">📂 从服务器导入配置</h3>
+              <button @click="closeImportDialog" class="close-btn" aria-label="关闭">×</button>
+            </div>
+
+            <div class="dialog-body">
+              <!-- 服务器信息 -->
+              <div class="server-info">
+                <span class="server-label">服务器：</span>
+                <span class="server-url">{{ apiServerURL }}</span>
+              </div>
+
+              <!-- 文件列表 -->
+              <div class="file-browser">
+                <!-- 目录导航 -->
+                <div class="directory-nav">
+                  <button
+                    v-if="canGoBack"
+                    @click="navigateToParentDirectory"
+                    class="nav-btn back-btn"
+                    title="返回上级目录"
+                  >
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <path d="M19 12H5M12 19l-7-7 7-7" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                    返回
+                  </button>
+                  <span class="nav-label">目录：</span>
+                  <span class="nav-path">{{ currentDirectoryDisplay }}</span>
+                </div>
+
+                <!-- 子目录列表 -->
+                <div class="file-list" v-if="!loadingServerFiles">
+                  <!-- 子目录 -->
+                  <div
+                    v-for="dir in currentSubdirectories"
+                    :key="'dir-' + dir"
+                    class="file-item directory-item"
+                    @click="navigateToDirectory(dir)"
+                  >
+                    <div class="file-icon">📁</div>
+                    <div class="file-info">
+                      <div class="file-name">{{ dir }}</div>
+                      <div class="file-path">目录</div>
+                    </div>
+                    <div class="file-action">📂</div>
+                  </div>
+
+                  <!-- 文件 -->
+                  <div
+                    v-for="file in currentDirectoryFiles"
+                    :key="file.path || file.filePath"
+                    class="file-item"
+                    :class="{ 'is-selected': selectedServerFile === file }"
+                    @click="selectServerFile(file)"
+                  >
+                    <div class="file-icon">📄</div>
+                    <div class="file-info">
+                      <div class="file-name">{{ file.fileName || file.name }}</div>
+                      <div class="file-path">{{ file.filePath || file.path }}</div>
+                      <div class="file-meta">
+                        <span class="file-size">{{ formatFileSize(file.fileSize || file.size) }}</span>
+                        <span class="file-date">{{ formatDate(file.modifiedTime || file.modified) }}</span>
+                      </div>
+                    </div>
+                    <div class="file-action">📥</div>
+                  </div>
+                </div>
+
+                <!-- 加载状态 -->
+                <div v-else class="file-list loading">
+                  <div class="loading-spinner"></div>
+                  <p>正在加载服务器文件...</p>
+                </div>
+
+                <!-- 空状态 -->
+                <div v-if="!loadingServerFiles && serverFiles.length === 0" class="empty-state">
+                  <div class="empty-icon">📁</div>
+                  <div class="empty-title">服务器上没有找到配置文件</div>
+                  <div class="empty-hint">请确保 API 服务器已启动</div>
+                </div>
+              </div>
+            </div>
+
+            <div class="dialog-footer">
+              <button @click="closeImportDialog" class="dialog-btn cancel-btn">取消</button>
+              <button
+                @click="loadServerFiles()"
+                class="dialog-btn secondary-btn"
+                :disabled="loadingServerFiles"
+              >
+                🔄 刷新
+              </button>
+            </div>
+          </div>
+        </div>
+      </Transition>
+    </Teleport>
   </FunctionPanelUIBase>
 
   <!-- 高度调整面板（独立渲染，避免嵌套Teleport冲突） -->
@@ -246,7 +356,7 @@ import ObliqueHeightAdjustPanel from './ObliqueHeightAdjustPanel.vue';
 import { panelSingletonManager } from '../utils/PanelSingletonManager.js';
 import { dataManager } from '../../utils/DataManager.js';
 
-const JSON_FILE_PATH = '/data/gis/oblique-photography.json';
+const JSON_FILE_PATH = '/data/gis/oblique_photography.json';
 const CONFIG_ID = 'oblique-photography';
 
 /**
@@ -287,6 +397,16 @@ export default {
       showAddDialog: false,
       showEditDialog: false,
       showDeleteDialog: false,
+      showImportDialog: false,  // ⭐ 服务器文件导入对话框
+      // 服务器文件浏览相关
+      serverFiles: [],           // 所有服务器文件
+      serverDirectories: {},     // 目录结构
+      selectedServerFile: null,
+      loadingServerFiles: false,
+      currentServerDirectory: '', // 当前目录路径（相对于 data 目录）
+      allFilesMap: new Map(),    // 文件路径到文件对象的映射
+      serverBaseURL: '', // ⭐ 前端服务器地址（用于静态文件）
+      apiServerURL: '', // ⭐ API 服务器地址（用于 API 请求）
       // 表单数据
       formData: {
         id: '',
@@ -311,6 +431,21 @@ export default {
     this._cesiumHeightOffsets = new Map(); // 存储heightOffset
     this._cesiumErrorHandlers = new Map(); // 存储错误处理器
   },
+  created() {
+    // ⭐ 从环境变量读取服务器配置
+    this.serverBaseURL = process.env.VUE_APP_SERVER_BASE_URL || 'http://192.168.31.146:8080';
+
+    // ⭐ API 服务器地址（从环境变量获取，或从前端地址推断）
+    const apiPort = process.env.VUE_APP_API_PORT || '8081';
+    const urlObj = new URL(this.serverBaseURL);
+    urlObj.port = apiPort;
+    this.apiServerURL = urlObj.toString().replace(/\/$/, '');
+
+    console.log(`[${this.componentName}] 🔧 服务器配置:`, {
+      frontend: this.serverBaseURL,
+      api: this.apiServerURL
+    });
+  },
   computed: {
     /**
      * 计算高度调整面板的X位置
@@ -323,6 +458,93 @@ export default {
       }
       // 如果是 'center' 或其他字符串，保持原值
       return this.initialX;
+    },
+
+    /**
+     * 获取当前目录的文件列表
+     */
+    currentDirectoryFiles() {
+      const currentDir = this.currentServerDirectory || '';
+
+      return this.serverFiles.filter(file => {
+        const filePath = file.filePath || file.path;
+        if (!filePath) return false;
+
+        // 获取文件所在目录
+        const fileDir = filePath.includes('/')
+          ? filePath.substring(0, filePath.lastIndexOf('/'))
+          : '';
+
+        // 匹配当前目录
+        return fileDir === currentDir;
+      });
+    },
+
+    /**
+     * 获取当前目录的子目录列表
+     */
+    currentSubdirectories() {
+      const currentDir = this.currentServerDirectory || '';
+      const subdirs = new Set();
+
+      this.serverFiles.forEach(file => {
+        const filePath = file.filePath || file.path;
+        if (!filePath) return;
+
+        // 获取文件所在目录
+        const fileDir = filePath.includes('/')
+          ? filePath.substring(0, filePath.lastIndexOf('/'))
+          : '';
+
+        // 跳过当前目录的文件
+        if (fileDir === currentDir) return;
+
+        // 检查是否是当前目录的子目录
+        if (currentDir === '') {
+          // 根目录：提取第一级目录名
+          if (fileDir) {
+            const firstSlash = fileDir.indexOf('/');
+            if (firstSlash === -1) {
+              // 直接子目录（如 gis, config4user）
+              subdirs.add(fileDir);
+            } else {
+              // 嵌套子目录，取第一级（如 config4user/user1 中的 config4user）
+              subdirs.add(fileDir.substring(0, firstSlash));
+            }
+          }
+        } else {
+          // 子目录：检查是否以当前目录为前缀
+          if (fileDir.startsWith(currentDir + '/')) {
+            // 提取下一级目录名
+            const relativePath = fileDir.substring(currentDir.length + 1);
+            const firstSlash = relativePath.indexOf('/');
+
+            if (firstSlash === -1) {
+              // 直接子目录
+              subdirs.add(relativePath);
+            } else {
+              // 嵌套子目录，取第一级
+              subdirs.add(relativePath.substring(0, firstSlash));
+            }
+          }
+        }
+      });
+
+      return Array.from(subdirs).sort();
+    },
+
+    /**
+     * 获取当前目录的显示路径
+     */
+    currentDirectoryDisplay() {
+      return '/data/' + (this.currentServerDirectory ? this.currentServerDirectory + '/' : '');
+    },
+
+    /**
+     * 是否可以返回上级目录
+     */
+    canGoBack() {
+      return this.currentServerDirectory !== '';
     }
   },
   mounted() {
@@ -523,10 +745,10 @@ export default {
     },
 
     /**
-     * 导出配置为 JSON 文件（下载）
+     * 导出配置到服务器
      */
     async exportConfig() {
-      console.log(`[${this.componentName}] 📤 准备导出配置`);
+      console.log(`[${this.componentName}] 📤 准备导出配置到服务器`);
 
       // 提取需要保存的数据（排除运行时状态）
       const saveData = this.obliquePhotographyList.map(item => ({
@@ -543,73 +765,209 @@ export default {
         return false;
       }
 
-      // 导出配置
-      const success = await dataManager.exportConfig(CONFIG_ID, saveData, {
-        pretty: true,
-        fileName: 'oblique-photography.json'
-      });
+      // 上传到服务器
+      const result = await dataManager.uploadToServer(CONFIG_ID, saveData);
 
-      if (success) {
-        console.log(`[${this.componentName}] ✅ 配置导出成功`);
-        alert('配置导出成功！文件已下载到浏览器下载目录。');
+      if (result.success) {
+        console.log(`[${this.componentName}] ✅ 配置已导出到服务器`);
+        alert(`配置已成功导出到服务器！\n\n文件：oblique-photography.json\n数据将自动同步到 FTP 目录`);
       } else {
-        console.error(`[${this.componentName}] ❌ 配置导出失败`);
-        alert('配置导出失败，请查看控制台错误信息。');
+        console.error(`[${this.componentName}] ❌ 导出失败:`, result.error);
+        alert(`导出失败！\n\n错误：${result.error}\n\n请检查：\n1. API 服务器是否启动（端口 8081）\n2. 网络连接是否正常`);
       }
 
-      return success;
+      return result.success;
     },
 
     /**
-     * 导入配置文件
+     * 打开服务器文件导入对话框
+     */
+    async openImportDialog() {
+      console.log(`[${this.componentName}] 📂 打开服务器文件浏览`);
+
+      // 显示对话框
+      this.showImportDialog = true;
+
+      // 加载服务器文件列表
+      await this.loadServerFiles();
+    },
+
+    /**
+     * 从服务器导入配置
      */
     async importConfig() {
-      console.log(`[${this.componentName}] 📥 准备导入配置`);
+      console.log(`[${this.componentName}] 📥 打开服务器文件导入对话框`);
 
-      // 导入配置
-      const result = await dataManager.importConfig({
-        accept: '.json,application/json',
-        onProgress: (progress) => {
-          console.log(`[${this.componentName}] 导入进度: ${progress.toFixed(1)}%`);
-        }
-      });
+      // 打开文件浏览对话框
+      await this.openImportDialog();
+    },
 
-      if (!result) {
-        console.log(`[${this.componentName}] ⚠️ 导入取消或失败`);
-        return false;
+    /**
+     * 加载服务器文件列表
+     */
+    async loadServerFiles(directory = '') {
+      this.loadingServerFiles = true;
+
+      try {
+        // 获取服务器文件列表
+        const files = await dataManager.listServerFiles(directory);
+
+        // 获取目录结构
+        const directories = await dataManager.getServerDirectoryStructure();
+
+        this.serverFiles = files;
+        this.serverDirectories = directories;
+
+        // 创建文件路径映射
+        this.allFilesMap = new Map();
+        files.forEach(file => {
+          const filePath = file.filePath || file.path;
+          if (filePath) {
+            this.allFilesMap.set(filePath, file);
+          }
+        });
+
+        console.log(`[${this.componentName}] ✅ 已加载 ${files.length} 个文件，${Object.keys(directories).length} 个目录`);
+      } catch (error) {
+        console.error(`[${this.componentName}] ❌ 加载服务器文件失败:`, error);
+        alert(`加载服务器文件失败！\n\n错误：${error.message}\n\n请检查：\n1. API 服务器是否启动（端口 8081）\n2. 网络连接是否正常`);
+
+        this.serverFiles = [];
+        this.serverDirectories = {};
+        this.allFilesMap = new Map();
+      } finally {
+        this.loadingServerFiles = false;
+      }
+    },
+
+    /**
+     * 导航到子目录
+     */
+    navigateToDirectory(dirName) {
+      const newPath = this.currentServerDirectory
+        ? `${this.currentServerDirectory}/${dirName}`
+        : dirName;
+
+      console.log(`[${this.componentName}] 📂 进入目录: ${newPath}`);
+      this.currentServerDirectory = newPath;
+    },
+
+    /**
+     * 返回上级目录
+     */
+    navigateToParentDirectory() {
+      if (!this.currentServerDirectory) return;
+
+      const lastSlash = this.currentServerDirectory.lastIndexOf('/');
+      const parentPath = lastSlash === -1
+        ? ''
+        : this.currentServerDirectory.substring(0, lastSlash);
+
+      console.log(`[${this.componentName}] 🔙 返回上级目录: ${parentPath || '(根目录)'}`);
+      this.currentServerDirectory = parentPath;
+    },
+
+    /**
+     * 选择服务器文件进行导入
+     */
+    async selectServerFile(file) {
+      if (!file) {
+        this.selectedServerFile = null;
+        return;
+      }
+
+      // 兼容不同的属性名
+      const fileName = file.fileName || file.name;
+      const filePath = file.filePath || file.path;
+
+      console.log(`[${this.componentName}] 📄 选择文件: ${fileName}`);
+      console.log(`[${this.componentName}] 文件路径: ${filePath}`);
+
+      this.selectedServerFile = file;
+
+      // 确认导入
+      const confirmMsg = `确认导入文件：${fileName}\n\n这将覆盖当前配置。`;
+      if (!confirm(confirmMsg)) {
+        console.log(`[${this.componentName}] ⚠️ 用户取消导入`);
+        return;
+      }
+
+      // 从服务器加载文件内容
+      // 注意：使用 CONFIG_ID 而不是文件路径，因为 DataManager 中有配置定义
+      const data = await dataManager.loadFromServer(CONFIG_ID);
+
+      if (!data) {
+        alert(`从服务器加载文件失败！\n\n请检查网络连接`);
+        return;
       }
 
       // 验证数据
-      const validation = dataManager.validateConfig(CONFIG_ID, result.data);
+      const validation = dataManager.validateConfig(CONFIG_ID, data);
       if (!validation.valid) {
-        console.error(`[${this.componentName}] ❌ 数据验证失败:`, validation.errors);
-        const confirmMsg = `数据验证失败:\n${validation.errors.join('\n')}\n\n是否仍要导入？`;
-        if (!confirm(confirmMsg)) {
-          return false;
-        }
-      }
-
-      // 确认导入
-      const itemCount = Array.isArray(result.data) ? result.data.length : Object.keys(result.data).length;
-      const confirmMsg = `确认导入 ${itemCount} 条配置？\n\n这将覆盖当前配置。`;
-      if (!confirm(confirmMsg)) {
-        console.log(`[${this.componentName}] ⚠️ 用户取消导入`);
-        return false;
+        alert(`服务器数据验证失败:\n${validation.errors.join('\n')}`);
+        return;
       }
 
       // 应用导入的数据
-      this.obliquePhotographyList = result.data.map(item => ({
+      this.obliquePhotographyList = data.map(item => ({
         ...item,
         loaded: false,
         heightOffset: 0.0,
         loading: false
       }));
 
-      console.log(`[${this.componentName}] ✅ 配置导入成功，共 ${this.obliquePhotographyList.length} 条`);
+      console.log(`[${this.componentName}] ✅ 从服务器导入配置成功，共 ${this.obliquePhotographyList.length} 条`);
 
-      alert(`配置导入成功！\n共导入 ${this.obliquePhotographyList.length} 条配置。`);
+      // 关闭对话框
+      this.closeImportDialog();
 
-      return true;
+      alert(`配置已成功从服务器导入！\n\n文件：${fileName}\n共导入 ${this.obliquePhotographyList.length} 条配置。`);
+    },
+
+    /**
+     * 关闭导入对话框
+     */
+    closeImportDialog() {
+      this.showImportDialog = false;
+      this.selectedServerFile = null;
+      // 保留文件列表和目录状态，不重置
+      // this.serverFiles = [];
+      // this.serverDirectories = {};
+    },
+
+    /**
+     * 格式化日期时间
+     * @param {string|Date} date - 日期对象或字符串
+     * @returns {string} 格式化的日期
+     */
+    formatDate(date) {
+      if (!date) return '未知';
+
+      const d = new Date(date);
+      if (isNaN(d.getTime())) return '无效日期';
+
+      const year = d.getFullYear();
+      const month = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      const hours = String(d.getHours()).padStart(2, '0');
+      const minutes = String(d.getMinutes()).padStart(2, '0');
+
+      return `${year}-${month}-${day} ${hours}:${minutes}`;
+    },
+
+    /**
+     * 格式化文件大小
+     * @param {number} bytes - 文件大小（字节）
+     * @returns {string} 格式化的文件大小
+     */
+    formatFileSize(bytes) {
+      if (!bytes || bytes === 0) return '0 B';
+
+      const k = 1024;
+      const sizes = ['B', 'KB', 'MB', 'GB'];
+      const i = Math.floor(Math.log(bytes) / Math.log(k));
+
+      return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
     },
 
     /**
@@ -1277,6 +1635,189 @@ export default {
 .empty-hint {
   font-size: 13px;
   color: #808090;
+}
+
+/* ==================== 服务器文件浏览对话框 ==================== */
+
+.dialog-large {
+  max-width: 700px;
+  width: 90%;
+}
+
+.server-info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  margin-bottom: 16px;
+  background: rgba(33, 150, 243, 0.1);
+  border: 1px solid rgba(33, 150, 243, 0.3);
+  border-radius: 8px;
+  font-size: 13px;
+}
+
+.server-label {
+  color: #90CAF9;
+  font-weight: 600;
+}
+
+.server-url {
+  color: #e0e0e0;
+  font-family: 'Courier New', monospace;
+  font-size: 12px;
+}
+
+.file-browser {
+  max-height: 400px;
+  overflow-y: auto;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.2);
+}
+
+.directory-nav {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  background: rgba(255, 255, 255, 0.05);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  font-size: 13px;
+}
+
+.nav-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 10px;
+  background: rgba(33, 150, 243, 0.2);
+  border: 1px solid rgba(33, 150, 243, 0.4);
+  border-radius: 6px;
+  color: #2196F3;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.nav-btn:hover {
+  background: rgba(33, 150, 243, 0.3);
+  border-color: rgba(33, 150, 243, 0.6);
+}
+
+.nav-btn svg {
+  width: 14px;
+  height: 14px;
+}
+
+.back-btn {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.2);
+  color: #e0e0e0;
+}
+
+.back-btn:hover {
+  background: rgba(255, 255, 255, 0.15);
+  border-color: rgba(255, 255, 255, 0.3);
+}
+
+.nav-label {
+  color: #808090;
+  font-weight: 600;
+}
+
+.nav-path {
+  color: #4CAF50;
+  font-family: 'Courier New', monospace;
+}
+
+.file-list {
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.file-list.loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 20px;
+  gap: 16px;
+}
+
+.loading-spinner {
+  width: 32px;
+  height: 32px;
+  border: 3px solid rgba(76, 175, 80, 0.3);
+  border-top-color: #4CAF50;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.file-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  cursor: pointer;
+  transition: all 0.2s;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.file-item:hover {
+  background: rgba(76, 175, 80, 0.1);
+}
+
+.file-item.is-selected {
+  background: rgba(76, 175, 80, 0.2);
+  border-color: rgba(76, 175, 80, 0.4);
+}
+
+.file-item.directory-item:hover {
+  background: rgba(33, 150, 243, 0.15);
+}
+
+.file-item.directory-item .file-action {
+  opacity: 0.6;
+}
+
+.file-icon {
+  font-size: 24px;
+  opacity: 0.8;
+}
+
+.file-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.file-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: #e0e0e0;
+  margin-bottom: 2px;
+}
+
+.file-path {
+  font-size: 12px;
+  color: #808090;
+  font-family: 'Courier New', monospace;
+  margin-bottom: 4px;
+}
+
+.file-meta {
+  display: flex;
+  gap: 16px;
+  font-size: 11px;
+  color: #606070;
+}
+
+.file-action {
+  font-size: 16px;
+  opacity: 0.5;
 }
 
 /* 对话框 */
