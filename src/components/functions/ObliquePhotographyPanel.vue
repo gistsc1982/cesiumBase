@@ -314,7 +314,9 @@ export default {
   mounted() {
     // ⭐ 单例模式：检查是否有保存的状态
     const savedState = panelSingletonManager.getPanelState(this.componentName);
-    if (savedState) {
+    const hasValidData = savedState && savedState.obliquePhotographyList && savedState.obliquePhotographyList.length > 0;
+
+    if (hasValidData) {
       console.log(`[${this.componentName}] 📦 恢复保存的状态（单例模式）`);
 
       // 恢复 Cesium 对象
@@ -336,15 +338,18 @@ export default {
 
     this.initCesium(() => {
       console.log(`[${this.componentName}] Cesium 已就绪，面板初始化完成`);
-    });
 
-    // 如果没有保存的状态，从 JSON 加载
-    if (!savedState) {
-      this.loadFromJson();
-    } else {
-      // 如果有保存的状态，重新将 Cesium 对象添加到场景
-      this.restoreCesiumObjects();
-    }
+      // ⭐ 等待 Cesium 就绪后再加载数据
+      if (!hasValidData) {
+        // 没有有效数据：从 JSON 加载
+        console.log(`[${this.componentName}] 📂 没有保存的有效数据，从 JSON 加载`);
+        this.loadFromJson();
+      } else {
+        // 有有效数据：恢复 Cesium 对象
+        console.log(`[${this.componentName}] 🔄 有保存的数据，恢复 Cesium 对象`);
+        this.restoreCesiumObjects();
+      }
+    });
   },
   beforeUnmount() {
     // ⭐ 单例模式：保存面板状态到单例管理器
@@ -443,29 +448,55 @@ export default {
      */
     async loadFromJson() {
       try {
+        console.log(`[${this.componentName}] 📂 开始加载JSON文件: ${JSON_FILE_PATH}`);
+
         const response = await fetch(JSON_FILE_PATH);
+
+        console.log(`[${this.componentName}] 📡 HTTP响应状态: ${response.status} ${response.statusText}`);
+
         if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
+          throw new Error(`HTTP error! status: ${response.status}, text: ${response.statusText}`);
         }
+
         const data = await response.json();
+
+        console.log(`[${this.componentName}] 📦 JSON解析成功，原始数据:`, data);
+
+        // 验证数据格式
+        if (!Array.isArray(data)) {
+          console.error(`[${this.componentName}] ❌ JSON数据格式错误：期望数组，实际收到:`, typeof data);
+          this.obliquePhotographyList = [];
+          return;
+        }
+
+        if (data.length === 0) {
+          console.warn(`[${this.componentName}] ⚠️ JSON数据为空数组`);
+          this.obliquePhotographyList = [];
+          return;
+        }
 
         // ⚡ 性能优化：保留UI状态，Cesium对象从非响应式Map中获取
         this.obliquePhotographyList = data.map(item => {
           const existing = this.obliquePhotographyList.find(old => old.id === item.id);
-          // ⭐ Cesium对象存储在非响应式Map中，不在这里返回
-          const cesiumData = this._cesiumTilesets.get(item.id);
           return {
             ...item,
             loaded: existing?.loaded || false,
-            // ⚡ 不存储tileset和initialTransform，从Map中获取
             heightOffset: this._cesiumHeightOffsets.get(item.id) || 0.0,
             loading: false
           };
         });
 
-        console.log(`[${this.componentName}] 从JSON加载数据成功，共 ${this.obliquePhotographyList.length} 条`);
+        console.log(`[${this.componentName}] ✅ 从JSON加载数据成功，共 ${this.obliquePhotographyList.length} 条:`, this.obliquePhotographyList);
       } catch (error) {
-        console.error(`[${this.componentName}] 从JSON加载数据失败:`, error);
+        console.error(`[${this.componentName}] ❌ 从JSON加载数据失败:`, error);
+        console.error(`[${this.componentName}] 错误详情:`, {
+          message: error.message,
+          stack: error.stack,
+          name: error.name
+        });
+
+        // 设置为空数组，避免显示错误状态
+        this.obliquePhotographyList = [];
       }
     },
 

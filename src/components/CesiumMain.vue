@@ -586,6 +586,15 @@ export default {
           ariaLabel: '多实例'
         },
         {
+          id: 'oblique-photo',
+          icon: '📷',
+          label: '倾斜摄影',
+          tooltip: '倾斜摄影面板（单例模式测试）',
+          active: this.registeredPanels.ObliquePhotographyPanel?.visible || false,
+          disabled: false,
+          ariaLabel: '倾斜摄影面板'
+        },
+        {
           id: 'testsfc-modal',
           icon: '🧪',
           label: 'TestSfc',
@@ -882,6 +891,9 @@ export default {
         case 'multi-instance':
           this.createDualCanvasInstance();
           break;
+        case 'oblique-photo':
+          this.toggleObliquePhotographyPanel();
+          break;
         case 'testsfc-modal':
           this.toggleTestSfcModal();
           break;
@@ -893,6 +905,33 @@ export default {
           break;
         default:
           console.warn('[HelloWorld] 未知的工具条按钮:', button.id);
+      }
+    },
+
+    /**
+     * 切换倾斜摄影面板显示状态（单例模式测试）
+     */
+    toggleObliquePhotographyPanel() {
+      const panelKey = 'ObliquePhotographyPanel';
+
+      console.log(`[CesiumMain] 📷 切换倾斜摄影面板: ${panelKey}`);
+
+      // 检查面板是否已注册
+      if (this.registeredPanels[panelKey]) {
+        // 已注册：切换可见性
+        const currentVisible = this.registeredPanels[panelKey].visible;
+        this.registeredPanels[panelKey].visible = !currentVisible;
+
+        console.log(`[CesiumMain] 🔄 倾斜摄影面板可见性: ${!currentVisible ? '显示' : '隐藏'}（单例模式）`);
+      } else {
+        // 未注册：动态加载组件
+        console.log(`[CesiumMain] 📦 首次加载倾斜摄影面板组件`);
+
+        this.loadFunctionPanel(panelKey).then(() => {
+          console.log(`[CesiumMain] ✅ 倾斜摄影面板组件加载完成`);
+        }).catch((error) => {
+          console.error(`[CesiumMain] ❌ 倾斜摄影面板组件加载失败:`, error);
+        });
       }
     },
 
