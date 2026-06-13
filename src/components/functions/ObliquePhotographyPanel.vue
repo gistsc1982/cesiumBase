@@ -23,6 +23,18 @@
           </svg>
           添加
         </button>
+        <button @click="exportConfig" class="tool-btn export-btn" title="导出配置文件">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+          导出
+        </button>
+        <button @click="importConfig" class="tool-btn import-btn" title="导入配置文件">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+          导入
+        </button>
         <button @click="refreshFromJson" class="tool-btn refresh-btn" title="从JSON文件刷新数据">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M23 4v6h-6M1 20v-6h6" stroke-linecap="round" stroke-linejoin="round"/>
@@ -232,8 +244,10 @@ import FunctionPanelUIBase from '../functionPanelUIBase.vue';
 import SfcBase from '../SfcBase.vue';
 import ObliqueHeightAdjustPanel from './ObliqueHeightAdjustPanel.vue';
 import { panelSingletonManager } from '../utils/PanelSingletonManager.js';
+import { dataManager } from '../../utils/DataManager.js';
 
 const JSON_FILE_PATH = '/data/gis/oblique-photography.json';
+const CONFIG_ID = 'oblique-photography';
 
 /**
  * ObliquePhotographyPanel - 倾斜摄影功能面板
@@ -509,9 +523,11 @@ export default {
     },
 
     /**
-     * 保存数据到JSON文件（通过API）
+     * 导出配置为 JSON 文件（下载）
      */
-    async saveToJson() {
+    async exportConfig() {
+      console.log(`[${this.componentName}] 📤 准备导出配置`);
+
       // 提取需要保存的数据（排除运行时状态）
       const saveData = this.obliquePhotographyList.map(item => ({
         id: item.id,
@@ -519,11 +535,94 @@ export default {
         url: item.url
       }));
 
-      console.log(`[${this.componentName}] 准备保存数据:`, saveData);
-      // 注意：由于浏览器安全限制，无法直接写入文件系统
-      // 这里仅记录数据，实际保存需要后端API支持
-      console.warn(`[${this.componentName}] 浏览器环境无法直接写入JSON文件，需要后端API支持`);
+      // 验证数据
+      const validation = dataManager.validateConfig(CONFIG_ID, saveData);
+      if (!validation.valid) {
+        console.error(`[${this.componentName}] ❌ 数据验证失败:`, validation.errors);
+        alert(`数据验证失败:\n${validation.errors.join('\n')}`);
+        return false;
+      }
+
+      // 导出配置
+      const success = await dataManager.exportConfig(CONFIG_ID, saveData, {
+        pretty: true,
+        fileName: 'oblique-photography.json'
+      });
+
+      if (success) {
+        console.log(`[${this.componentName}] ✅ 配置导出成功`);
+        alert('配置导出成功！文件已下载到浏览器下载目录。');
+      } else {
+        console.error(`[${this.componentName}] ❌ 配置导出失败`);
+        alert('配置导出失败，请查看控制台错误信息。');
+      }
+
+      return success;
+    },
+
+    /**
+     * 导入配置文件
+     */
+    async importConfig() {
+      console.log(`[${this.componentName}] 📥 准备导入配置`);
+
+      // 导入配置
+      const result = await dataManager.importConfig({
+        accept: '.json,application/json',
+        onProgress: (progress) => {
+          console.log(`[${this.componentName}] 导入进度: ${progress.toFixed(1)}%`);
+        }
+      });
+
+      if (!result) {
+        console.log(`[${this.componentName}] ⚠️ 导入取消或失败`);
+        return false;
+      }
+
+      // 验证数据
+      const validation = dataManager.validateConfig(CONFIG_ID, result.data);
+      if (!validation.valid) {
+        console.error(`[${this.componentName}] ❌ 数据验证失败:`, validation.errors);
+        const confirmMsg = `数据验证失败:\n${validation.errors.join('\n')}\n\n是否仍要导入？`;
+        if (!confirm(confirmMsg)) {
+          return false;
+        }
+      }
+
+      // 确认导入
+      const itemCount = Array.isArray(result.data) ? result.data.length : Object.keys(result.data).length;
+      const confirmMsg = `确认导入 ${itemCount} 条配置？\n\n这将覆盖当前配置。`;
+      if (!confirm(confirmMsg)) {
+        console.log(`[${this.componentName}] ⚠️ 用户取消导入`);
+        return false;
+      }
+
+      // 应用导入的数据
+      this.obliquePhotographyList = result.data.map(item => ({
+        ...item,
+        loaded: false,
+        heightOffset: 0.0,
+        loading: false
+      }));
+
+      console.log(`[${this.componentName}] ✅ 配置导入成功，共 ${this.obliquePhotographyList.length} 条`);
+
+      alert(`配置导入成功！\n共导入 ${this.obliquePhotographyList.length} 条配置。`);
+
       return true;
+    },
+
+    /**
+     * 获取配置统计信息
+     */
+    getConfigStats() {
+      const saveData = this.obliquePhotographyList.map(item => ({
+        id: item.id,
+        name: item.name,
+        url: item.url
+      }));
+
+      return dataManager.getConfigStats(CONFIG_ID, saveData);
     },
 
     // ==================== 对话框管理 ====================
@@ -931,6 +1030,30 @@ export default {
 .add-btn:hover {
   background: rgba(76, 175, 80, 0.3);
   border-color: rgba(76, 175, 80, 0.6);
+  transform: translateY(-1px);
+}
+
+.export-btn {
+  background: rgba(33, 150, 243, 0.2);
+  border: 1px solid rgba(33, 150, 243, 0.4);
+  color: #2196F3;
+}
+
+.export-btn:hover {
+  background: rgba(33, 150, 243, 0.3);
+  border-color: rgba(33, 150, 243, 0.6);
+  transform: translateY(-1px);
+}
+
+.import-btn {
+  background: rgba(156, 39, 176, 0.2);
+  border: 1px solid rgba(156, 39, 176, 0.4);
+  color: #9C27B0;
+}
+
+.import-btn:hover {
+  background: rgba(156, 39, 176, 0.3);
+  border-color: rgba(156, 39, 176, 0.6);
   transform: translateY(-1px);
 }
 
