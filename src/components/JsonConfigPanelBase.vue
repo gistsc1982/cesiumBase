@@ -347,6 +347,11 @@ export default {
 
   mixins: [SfcBase],
 
+  inject: {
+    // ⭐ 覆盖 SfcBase 的 inject，避免 closeEventName 与 props 冲突
+    // ⚠️ 注意：不包含 closeEventName，因为在 props 中已定义
+  },
+
   props: {
     initialX: {
       type: [Number, String],
@@ -1151,20 +1156,44 @@ export default {
   color: #e0e0e0;
   cursor: pointer;
   transition: all 0.2s;
+  padding: 0;
 }
 
 .action-btn:hover {
   background: rgba(255, 255, 255, 0.2);
 }
 
-.delete-btn:hover {
-  background: rgba(255, 107, 107, 0.2);
-  border-color: rgba(255, 107, 107, 0.4);
-}
-
 .action-btn svg {
   width: 16px;
   height: 16px;
+}
+
+/* 定位按钮样式 */
+.action-btn.locate-btn:hover {
+  background: rgba(33, 150, 243, 0.2);
+  border-color: rgba(33, 150, 243, 0.4);
+  color: #2196F3;
+}
+
+/* 高度调整按钮样式 */
+.action-btn.height-btn:hover {
+  background: rgba(76, 175, 80, 0.2);
+  border-color: rgba(76, 175, 80, 0.4);
+  color: #4CAF50;
+}
+
+/* 编辑按钮样式 */
+.action-btn.edit-btn:hover {
+  background: rgba(255, 193, 7, 0.2);
+  border-color: rgba(255, 193, 7, 0.4);
+  color: #FFC107;
+}
+
+/* 删除按钮样式 */
+.action-btn.delete-btn:hover {
+  background: rgba(255, 107, 107, 0.2);
+  border-color: rgba(255, 107, 107, 0.4);
+  color: #ff6b6b;
 }
 
 /* ==================== 对话框 ==================== */

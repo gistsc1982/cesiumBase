@@ -87,6 +87,7 @@ export default {
   name: 'FunctionPanelUIBase',
   mixins: [SfcBase],
   inject: {
+    // ⭐ 覆盖 SfcBase 的 inject，避免 closeEventName 与 props 冲突
     // 父组件提供的注册方法（可选）
     registerPanelComponent: {
       type: Function,
@@ -110,6 +111,7 @@ export default {
     instanceId: {
       default: 1
     }
+    // ⚠️ 注意：不包含 closeEventName，因为在 props 中已定义
   },
   props: {
     // 自注册配置
@@ -466,25 +468,80 @@ export default {
 
     /**
      * 关闭面板
+     * ⭐ 根据单例/多实例模式执行不同的关闭逻辑
+     * - 单例模式（通过配置加载）：假关闭（隐藏面板，不销毁组件）
+     * - 多实例模式（mjs创建）：真关闭（销毁组件）
      */
     close() {
-      this.isClosed = true;
+      // ⭐ 自动判断是否为单例模式
+      // 单例模式：通过 functionPanels.config.json 配置自动加载
+      // 判断依据：autoRegister === true 且有 registrationKey
+      const isSingleton = this.autoRegister && this.registrationKey;
 
-      // 等待关闭动画完成
-      setTimeout(() => {
-        this.$emit('close');
+      if (isSingleton) {
+        // ⭐ 单例模式：假关闭（只隐藏面板）
+        console.log(`[FunctionPanelUIBase] 🔄 面板假关闭（单例模式）: ${this.registrationKey || this.componentName}`);
+        this.isClosed = true;
 
+        // ⭐ 触发假关闭事件，通知父组件只隐藏面板而不销毁
         if (typeof window !== 'undefined') {
-          const event = new CustomEvent(this.closeEventName, {
-            detail: { componentName: this.componentName }
+          const fakeCloseEvent = new CustomEvent(`${this.closeEventName}FakeClose`, {
+            detail: {
+              componentName: this.componentName,
+              registrationKey: this.registrationKey,
+              preserveData: true
+            }
           });
-          window.dispatchEvent(event);
+          window.dispatchEvent(fakeCloseEvent);
         }
 
-        if (this.onClose && typeof this.onClose === 'function') {
-          this.onClose();
-        }
-      }, 300);
+        // 等待关闭动画完成
+        setTimeout(() => {
+          this.$emit('close', { preserveData: true });
+
+          if (typeof window !== 'undefined') {
+            const event = new CustomEvent(this.closeEventName, {
+              detail: { componentName: this.componentName }
+            });
+            window.dispatchEvent(event);
+          }
+
+          if (this.onClose && typeof this.onClose === 'function') {
+            this.onClose();
+          }
+
+          // ⚠️ 单例模式：不注销组件，只隐藏
+          // 重置关闭状态，以便下次打开
+          this.$nextTick(() => {
+            this.isClosed = false;
+          });
+        }, 300);
+      } else {
+        // ⭐ 多实例模式：真关闭（销毁组件）
+        console.log(`[FunctionPanelUIBase] ❌ 面板真关闭（多实例模式）: ${this.registrationKey || this.componentName}`);
+        this.isClosed = true;
+
+        // 等待关闭动画完成
+        setTimeout(() => {
+          this.$emit('close', { preserveData: false });
+
+          if (typeof window !== 'undefined') {
+            const event = new CustomEvent(this.closeEventName, {
+              detail: { componentName: this.componentName }
+            });
+            window.dispatchEvent(event);
+          }
+
+          if (this.onClose && typeof this.onClose === 'function') {
+            this.onClose();
+          }
+
+          // ⭐ 多实例模式：触发注销逻辑
+          if (this.autoRegister && this.registrationKey) {
+            this.unregisterFromParent();
+          }
+        }, 300);
+      }
     },
 
     /**

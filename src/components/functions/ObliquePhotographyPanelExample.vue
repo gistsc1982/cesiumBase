@@ -1,7 +1,7 @@
 <template>
   <!-- 使用 JsonConfigPanelBase 作为基类 -->
   <JsonConfigPanelBase
-    panel-title="倾斜摄影加载"
+    panel-title="倾斜摄影加载（继承示例）"
     panel-icon="📷"
     :panel-width="420"
     :panel-max-height="'70vh'"
@@ -57,7 +57,7 @@
         class="action-btn locate-btn"
         type="button"
         :disabled="!item.loaded"
-        title="定位"
+        title="定位到3D Tiles位置"
       >
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z" stroke-linecap="round" stroke-linejoin="round"/>
