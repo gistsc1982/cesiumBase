@@ -333,7 +333,7 @@
 </template>
 
 <script>
-import FunctionPanelUIBase from './functionPanelUIBase.vue';
+import FunctionPanelUIBase from './FunctionPanelUIBase.vue';
 import SfcBase from './SfcBase.vue';
 import { dataManager } from '../utils/DataManager.js';
 import { panelSingletonManager } from './utils/PanelSingletonManager.js';

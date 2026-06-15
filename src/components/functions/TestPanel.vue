@@ -55,7 +55,7 @@
 </template>
 
 <script>
-import FunctionPanelUIBase from '../functionPanelUIBase.vue';
+import FunctionPanelUIBase from '../FunctionPanelUIBase.vue';
 
 /**
  * TestPanel - 测试自动加载功能的面板

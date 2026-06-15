@@ -40,6 +40,10 @@ class PanelSingletonManager {
     // Map<panelName, boolean>
     this.panelVisibility = new Map();
 
+    // ⭐ 面板注册表（单例面板的唯一注册表）
+    // Map<panelName, { component, props, visible, isClosed }>
+    this.panelRegistry = new Map();
+
     console.log('[PanelSingletonManager] 初始化完成');
   }
 
@@ -230,6 +234,147 @@ class PanelSingletonManager {
     this.panelVisibility.clear();
 
     console.log('[PanelSingletonManager] 🗑️ 清除所有面板状态');
+  }
+
+  // ==================== 面板注册表管理 ====================
+
+  /**
+   * 注册面板（单例面板的唯一注册表）
+   * @param {string} panelName - 面板名称
+   * @param {Object} config - 面板配置
+   * @param {Object} config.component - 组件实例
+   * @param {Object} config.props - 组件属性
+   * @param {boolean} config.visible - 是否可见
+   */
+  registerPanel(panelName, config) {
+    this.panelRegistry.set(panelName, {
+      component: config.component,
+      props: config.props || {},
+      visible: config.visible !== false,
+      isClosed: false
+    });
+    console.log(`[PanelSingletonManager] ✅ 注册面板: ${panelName}`, {
+      visible: config.visible,
+      hasComponent: !!config.component
+    });
+  }
+
+  /**
+   * 注销面板
+   * @param {string} panelName - 面板名称
+   */
+  unregisterPanel(panelName) {
+    const deleted = this.panelRegistry.delete(panelName);
+    if (deleted) {
+      console.log(`[PanelSingletonManager] 🗑️ 注销面板: ${panelName}`);
+    } else {
+      console.warn(`[PanelSingletonManager] ⚠️ 面板 ${panelName} 未注册`);
+    }
+    return deleted;
+  }
+
+  /**
+   * 获取面板配置
+   * @param {string} panelName - 面板名称
+   * @returns {Object|null} 面板配置
+   */
+  getPanel(panelName) {
+    return this.panelRegistry.get(panelName) || null;
+  }
+
+  /**
+   * 检查面板是否已注册
+   * @param {string} panelName - 面板名称
+   * @returns {boolean} 是否已注册
+   */
+  hasPanel(panelName) {
+    return this.panelRegistry.has(panelName);
+  }
+
+  /**
+   * 获取所有已注册的面板
+   * @returns {Array<Object>} 面板配置列表
+   */
+  getAllPanels() {
+    return Array.from(this.panelRegistry.entries()).map(([name, config]) => ({
+      name,
+      ...config
+    }));
+  }
+
+  /**
+   * 更新面板可见性（通过注册表）
+   * @param {string} panelName - 面板名称
+   * @param {boolean} visible - 是否可见
+   */
+  updatePanelVisible(panelName, visible) {
+    const panel = this.panelRegistry.get(panelName);
+    if (panel) {
+      panel.visible = visible;
+      // 如果设置为可见，同时重置 isClosed 状态
+      if (visible) {
+        panel.isClosed = false;
+      }
+      console.log(`[PanelSingletonManager] 🔄 更新面板可见性: ${panelName} = ${visible}, isClosed = ${panel.isClosed}`);
+    } else {
+      console.warn(`[PanelSingletonManager] ⚠️ 面板 ${panelName} 未注册，无法更新可见性`);
+    }
+  }
+
+  /**
+   * 获取面板可见性（通过注册表）
+   * @param {string} panelName - 面板名称
+   * @returns {boolean|null} 面板可见性
+   */
+  getPanelVisible(panelName) {
+    const panel = this.panelRegistry.get(panelName);
+    return panel ? panel.visible : null;
+  }
+
+  /**
+   * 设置面板关闭状态（通过注册表）
+   * @param {string} panelName - 面板名称
+   * @param {boolean} isClosed - 是否关闭
+   */
+  setPanelClosed(panelName, isClosed) {
+    const panel = this.panelRegistry.get(panelName);
+    if (panel) {
+      panel.isClosed = isClosed;
+      if (isClosed) {
+        panel.visible = false;
+      }
+      console.log(`[PanelSingletonManager] 🔒 设置面板关闭状态: ${panelName} = ${isClosed}`);
+    }
+  }
+
+  /**
+   * 获取面板关闭状态（通过注册表）
+   * @param {string} panelName - 面板名称
+   * @returns {boolean|null} 面板关闭状态
+   */
+  getPanelClosed(panelName) {
+    const panel = this.panelRegistry.get(panelName);
+    return panel ? panel.isClosed : null;
+  }
+
+  /**
+   * 获取注册表统计信息
+   * @returns {Object} 统计信息
+   */
+  getRegistryStats() {
+    return {
+      已注册面板数: this.panelRegistry.size,
+      可见面板数: Array.from(this.panelRegistry.values()).filter(p => p.visible).length,
+      关闭面板数: Array.from(this.panelRegistry.values()).filter(p => p.isClosed).count
+    };
+  }
+
+  /**
+   * 清空面板注册表
+   */
+  clearRegistry() {
+    this.panelRegistry.clear();
+    console.log('[PanelSingletonManager] 🗑️ 清空面板注册表');
   }
 }
 

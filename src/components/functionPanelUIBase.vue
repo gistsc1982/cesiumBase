@@ -79,6 +79,7 @@
 
 <script>
 import SfcBase from './SfcBase.vue';
+import { panelSingletonManager } from './utils/PanelSingletonManager.js';
 
 // 导入注册相关的工具（可选，如果子组件需要全局注册）
 // import { getRegistry, createRegistrationMixin } from '../utils/ComponentRegistry.js';
@@ -209,6 +210,17 @@ export default {
     // 自注册逻辑
     if (this.autoRegister && this.registrationKey) {
       this.registerToParent();
+    }
+
+    // ⭐ 从 PanelSingletonManager 同步 isClosed 状态
+    // 如果注册表中的 isClosed 为 false，重置组件的 isClosed 状态
+    const panelName = this.registrationKey || this.componentName;
+    if (panelSingletonManager.hasPanel(panelName)) {
+      const panel = panelSingletonManager.getPanel(panelName);
+      if (panel && !panel.isClosed && this.isClosed) {
+        console.log(`[FunctionPanelUIBase] 🔓 从 PanelSingletonManager 恢复面板状态: ${panelName}, isClosed = false`);
+        this.isClosed = false;
+      }
     }
 
     this.initCesium(() => {
@@ -499,6 +511,8 @@ export default {
      * ⭐ 根据单例/多实例模式执行不同的关闭逻辑
      * - 单例模式（通过配置加载）：假关闭（隐藏面板，不销毁组件）
      * - 多实例模式（动态创建）：真关闭（销毁组件并注销实例）
+     *
+     * ⭐ 面板自己管理关闭状态判断和验证注销
      */
     close() {
       // ⭐ 自动判断是否为单例模式
@@ -520,6 +534,10 @@ export default {
         if (this.cleanup && typeof this.cleanup === 'function') {
           this.cleanup();
         }
+
+        // ⭐ 使用 PanelSingletonManager 记录面板可见性状态
+        panelSingletonManager.setPanelVisible(this.registrationKey || this.componentName, false);
+        console.log(`[FunctionPanelUIBase] ✅ 已通过 PanelSingletonManager 设置面板 ${this.registrationKey || this.componentName} 可见性为 false`);
 
         // ⭐ 更新面板可见性（通过 inject 的 setPanelVisible 方法）
         if (this.setPanelVisible && typeof this.setPanelVisible === 'function') {
@@ -565,7 +583,7 @@ export default {
           // 面板将保持关闭状态，直到通过 visible prop 重新打开
         }, 300);
       } else if (isMultiInstance) {
-        // ⭐ 多实例面板模式：通过父组件注销面板实例
+        // ⭐ 多实例面板模式：面板自己注销
         console.log(`[FunctionPanelUIBase] 🗑️ 多实例面板注销: ${this.registrationKey || this.componentName} #${panelInstanceId}`);
         this.isClosed = true;
 
@@ -574,9 +592,19 @@ export default {
           this.cleanup();
         }
 
+        // ⭐ 面板自己注销：调用 multiInstancePanelConfigManager 注销自己
+        if (typeof window !== 'undefined' && window.__multiInstancePanelConfigManager__) {
+          const instanceId = this.instanceId || 1;
+          window.__multiInstancePanelConfigManager__.unregisterPanelInstance(
+            instanceId,
+            this.registrationKey || this.componentName,
+            panelInstanceId
+          );
+          console.log(`[FunctionPanelUIBase] ✅ 面板已自己注销实例: ${this.registrationKey || this.componentName} #${panelInstanceId}`);
+        }
+
         // 等待关闭动画完成
         setTimeout(() => {
-          // 通过 close 事件通知父组件注销面板实例
           this.$emit('close', { preserveData: false });
 
           if (typeof window !== 'undefined') {

@@ -271,6 +271,8 @@ import functionPanelsConfig from './functions/functionPanels.config.json';
 
 // ⭐ 导入多实例面板配置管理器
 import { multiInstancePanelConfigManager } from './utils/MultiInstancePanelConfigManager.js';
+// ⭐ 导入面板单例管理器
+import { panelSingletonManager } from './utils/PanelSingletonManager.js';
 
 // ⭐ 动态加载器配置
 const FUNCTION_PANELS_DIR = './functions/';
@@ -405,8 +407,8 @@ export default {
       // 提供注册相关方法给子组件
       registerPanelComponent: (key, config) => self.registerPanelComponent(key, config),
       unregisterPanelComponent: (key) => self.unregisterPanelComponent(key),
-      // 提供获取已注册面板的方法
-      getRegisteredPanels: () => self.registeredPanels,
+      // 提供获取已注册面板的方法（返回浅拷贝避免响应式循环）
+      getRegisteredPanels: () => ({...self.registeredPanels}),
       // ⭐ 提供设置面板可见性的方法
       setPanelVisible: (key, visible) => self.setPanelVisible(key, visible),
       // ⭐ 提供获取实例ID的函数
@@ -423,16 +425,12 @@ export default {
           config,
           panelInstanceId
         );
-        // 触发响应式更新
-        self.$forceUpdate();
         return instanceKey;
       },
       // ⭐ 提供注销面板实例的方法
       unregisterPanelInstance: (panelName, panelInstanceId) => {
         const instanceId = self.instanceId || 1;
         multiInstancePanelConfigManager.unregisterPanelInstance(instanceId, panelName, panelInstanceId);
-        // 触发响应式更新
-        self.$forceUpdate();
       },
       // ⭐ 提供获取面板实例的方法
       getPanelInstance: (panelName, panelInstanceId) => {
@@ -443,8 +441,6 @@ export default {
       setPanelInstanceVisible: (panelName, visible, panelInstanceId) => {
         const instanceId = self.instanceId || 1;
         multiInstancePanelConfigManager.setPanelInstanceVisible(instanceId, panelName, visible, panelInstanceId);
-        // 触发响应式更新
-        self.$forceUpdate();
       }
     };
   },
@@ -592,54 +588,49 @@ export default {
       // ⭐ 多实例面板计数器
       _panelInstanceCounter: 0,
       // ⭐ 强制刷新面板列表的计数器
-      _panelsRefreshCounter: 0
+      _panelsRefreshCounter: 0,
+      // ⭐ visibleFunctionPanels 计算属性缓存（避免每次返回新数组）
+      _cachedVisiblePanelsKey: '',
+      _cachedVisiblePanels: null
     };
   },
   computed: {
     /**
-     * 获取所有可见的功能面板（包括预注册的、已注册的和动态面板实例）
+     * 获取所有可见的功能面板
+     * ⭐ 由 PanelSingletonManager 和 MultiInstancePanelConfigManager 共同管理
+     * ⭐ 依赖 _panelsRefreshCounter 来触发响应式更新（因为管理器是外部状态）
      */
     visibleFunctionPanels() {
+      const instanceId = this.instanceId || 1;
       const panels = [];
 
-      // ⭐ 访问刷新计数器以建立依赖关系
-      const __ = this._panelsRefreshCounter;
+      // ⭐ 读取 _panelsRefreshCounter 以建立响应式依赖
+      // 这确保当面板状态变化时，计算属性会重新计算
+      const refreshCounter = this._panelsRefreshCounter;
 
-      // 1. 获取已注册且可见的面板（单实例模式）
-      for (const [key, config] of Object.entries(this.registeredPanels)) {
-        if (config.visible) {
+      // 1. 从 PanelSingletonManager 获取单例面板（已注册且可见的）
+      const singletonPanels = panelSingletonManager.getAllPanels();
+      for (const panel of singletonPanels) {
+        if (panel.visible && panel.component) {
+          // 如果有组件引用，直接使用
           panels.push({
-            key,
-            component: config.component,
-            props: config.props
+            key: panel.name,
+            component: panel.component,
+            props: panel.props || {}
+          });
+        } else if (panel.visible && this.functionPanelComponents[panel.name]) {
+          // 如果管理器中没有组件引用，从本地缓存中获取
+          panels.push({
+            key: panel.name,
+            component: this.functionPanelComponents[panel.name],
+            props: panel.props || {}
           });
         }
       }
 
-      // 2. 获取已加载但从未注册过的面板（只在首次显示）
-      for (const [name, component] of Object.entries(this.functionPanelComponents)) {
-        const isRegistered = !!this.registeredPanels[name];
-        // 只有从未注册过的才显示（一旦注册过，就由 registeredPanels 控制可见性）
-        if (!isRegistered) {
-          panels.push({
-            key: name,
-            component,
-            props: {}
-          });
-        }
-      }
-
-      // 3. ⭐ 获取动态面板实例（多实例模式）
-      const instanceId = this.instanceId || 1;
+      // 2. 从 MultiInstancePanelConfigManager 获取动态面板实例（多实例模式）
       const dynamicInstances = multiInstancePanelConfigManager.getVisiblePanelInstances(instanceId);
-      console.log(`[CesiumMain] 🔍 获取到 ${dynamicInstances.length} 个动态面板实例`, dynamicInstances);
       for (const instance of dynamicInstances) {
-        console.log(`[CesiumMain] 🔍 面板实例详情:`, {
-          key: `${instance.panelName}_${instance.panelInstanceId}`,
-          hasComponent: !!instance.component,
-          componentType: typeof instance.component,
-          props: instance.props
-        });
         panels.push({
           key: `${instance.panelName}_${instance.panelInstanceId}`, // 唯一键
           component: instance.component,
@@ -654,12 +645,6 @@ export default {
     Cesium() {
       return this.cesium;
     }
-  },
-  provide: {
-    // 向子组件提供注册方法（注意：在 Vue 2 中，provide 不能访问 this，所以这些方法将在 data 中定义）
-    registerPanelComponent: null,
-    unregisterPanelComponent: null,
-    getInstanceId: null
   },
   components: {
     CesiumToolbar,
@@ -799,56 +784,70 @@ export default {
       const instanceId = this.instanceId || 1;
       console.log(`[CesiumMain #${instanceId}] 注册面板组件: ${key}`, config);
 
-      // ⭐ ObliquePhotographyPanel 单实例模式检查
-      if (key === 'ObliquePhotographyPanel' && this.registeredPanels[key]) {
-        console.log(`[CesiumMain #${instanceId}] ⭐ ObliquePhotographyPanel 已存在，使用单实例模式（仅显示面板）`);
-
-        // ⚡ 清理旧的组件实例引用（已被销毁）
-        // 这样可以避免内存泄漏，并且确保使用新的组件实例
-        const oldComponent = this.registeredPanels[key].component;
-        if (oldComponent && oldComponent !== config.component) {
-          console.log(`[CesiumMain #${instanceId}] 🔄 清理旧的 ObliquePhotographyPanel 实例引用`);
+      // ⭐ 防止重复注册：检查面板是否已经在 PanelSingletonManager 中注册
+      const existingPanel = panelSingletonManager.getPanel(key);
+      if (existingPanel) {
+        // 如果面板已存在且配置未变化，跳过注册避免循环更新
+        if (existingPanel.component === config.component &&
+            existingPanel.visible === config.visible) {
+          console.log(`[CesiumMain #${instanceId}] ⏭️ 面板 ${key} 已存在，跳过重复注册`);
+          return;
         }
-
-        // 更新为新的组件实例
-        this.registeredPanels[key].component = markRaw(config.component);
-
-        // 设置可见性
-        this.registeredPanels[key].visible = true;
-
-        // 更新位置配置（如果需要）
-        const instancePanelConfig = multiInstancePanelConfigManager.getPanelConfig(instanceId, key);
-        if (instancePanelConfig?.position) {
-          this.registeredPanels[key].props = {
-            ...this.registeredPanels[key].props,
-            ...instancePanelConfig.position
-          };
-        }
-
-        console.log(`[CesiumMain #${instanceId}] ✅ ObliquePhotographyPanel 已显示（保留已加载的倾斜摄影数据）`);
-        return;
       }
 
-      // ⭐ 从多实例配置管理器获取实例特定的配置
-      const instancePanelConfig = multiInstancePanelConfigManager.getPanelConfig(instanceId, key);
+      // ⭐ 使用 $nextTick 延迟注册，避免在渲染过程中修改响应式数据导致无限循环
+      this.$nextTick(() => {
+        // ⭐ ObliquePhotographyPanel 单实例模式检查
+        if (key === 'ObliquePhotographyPanel' && panelSingletonManager.hasPanel(key)) {
+          console.log(`[CesiumMain #${instanceId}] ⭐ ObliquePhotographyPanel 已存在，使用单实例模式（仅显示面板）`);
 
-      // 合并配置：实例配置优先，然后是传入的配置
-      const mergedProps = {
-        ...(instancePanelConfig?.position || {}),
-        ...(config.props || {})
-      };
+          // ⚡ 清理旧的组件实例引用（已被销毁）
+          const currentPanel = panelSingletonManager.getPanel(key);
+          const oldComponent = currentPanel?.component;
+          if (oldComponent && oldComponent !== config.component) {
+            console.log(`[CesiumMain #${instanceId}] 🔄 清理旧的 ObliquePhotographyPanel 实例引用`);
+          }
 
-      const mergedVisible = instancePanelConfig ? instancePanelConfig.visible : (config.visible !== false);
+          // ⭐ 同步更新到 PanelSingletonManager
+          panelSingletonManager.registerPanel(key, {
+            component: markRaw(config.component),
+            props: currentPanel?.props || config.props || {},
+            visible: true
+          });
 
-      this.registeredPanels[key] = {
-        component: markRaw(config.component), // 使用 markRaw 避免响应式包装
-        props: mergedProps,
-        visible: mergedVisible
-      };
+          console.log(`[CesiumMain #${instanceId}] ✅ ObliquePhotographyPanel 已显示（保留已加载的倾斜摄影数据）`);
+          return;
+        }
 
-      console.log(`[CesiumMain #${instanceId}] ✅ 面板 ${key} 已注册（使用实例配置）:`, {
-        visible: mergedVisible,
-        position: mergedProps
+        // ⭐ 从多实例配置管理器获取实例特定的配置
+        const instancePanelConfig = multiInstancePanelConfigManager.getPanelConfig(instanceId, key);
+
+        // 合并配置：实例配置优先，然后是传入的配置
+        const mergedProps = {
+          ...(instancePanelConfig?.position || {}),
+          ...(config.props || {})
+        };
+
+        const mergedVisible = instancePanelConfig ? instancePanelConfig.visible : (config.visible !== false);
+
+        // ⭐ 注册到 PanelSingletonManager（统一管理单例面板）
+        panelSingletonManager.registerPanel(key, {
+          component: markRaw(config.component), // 使用 markRaw 避免响应式包装
+          props: mergedProps,
+          visible: mergedVisible
+        });
+
+        // ⭐ 同时缓存到本地（用于兼容性）
+        this.registeredPanels[key] = {
+          component: markRaw(config.component),
+          props: mergedProps,
+          visible: mergedVisible
+        };
+
+        console.log(`[CesiumMain #${instanceId}] ✅ 面板 ${key} 已注册（使用实例配置）:`, {
+          visible: mergedVisible,
+          position: mergedProps
+        });
       });
     },
 
@@ -915,7 +914,6 @@ export default {
         console.log(`[CesiumMain] 🗑️ 动态面板实例已注销: ${panelKey}`);
         // 触发响应式更新
         this._panelsRefreshCounter++;
-        this.$forceUpdate();
         return;
       }
 
@@ -1037,7 +1035,6 @@ export default {
 
         // 触发响应式更新
         this._panelsRefreshCounter++;
-        this.$forceUpdate();
       } catch (error) {
         console.error(`[CesiumMain] ❌ 创建多实例面板失败: ${error}`);
       }

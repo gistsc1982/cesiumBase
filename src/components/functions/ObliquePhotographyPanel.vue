@@ -350,7 +350,7 @@
 </template>
 
 <script>
-import FunctionPanelUIBase from '../functionPanelUIBase.vue';
+import FunctionPanelUIBase from '../FunctionPanelUIBase.vue';
 import SfcBase from '../SfcBase.vue';
 import ObliqueHeightAdjustPanel from './ObliqueHeightAdjustPanel.vue';
 import { panelSingletonManager } from '../utils/PanelSingletonManager.js';
