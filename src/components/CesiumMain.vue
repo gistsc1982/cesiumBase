@@ -72,7 +72,7 @@
     <!-- ⭐ 动态渲染自注册的功能面板 -->
     <template v-for="panel in visibleFunctionPanels" :key="panel.key">
       <component
-        :is="getFunctionPanelComponent(panel.key)"
+        :is="panel.component || getFunctionPanelComponent(panel.key)"
         v-bind="panel.props"
         @close="handlePanelClose(panel.key)"
       />
@@ -375,7 +375,25 @@ function getEnabledPanelNames() {
  */
 function getPanelConfig(componentName) {
   const configs = getAvailablePanelConfigs();
-  return configs.find(panel => panel.name === componentName) || null;
+
+  // 首先尝试直接匹配
+  let config = configs.find(panel => panel.name === componentName);
+  if (config) {
+    return config;
+  }
+
+  // 如果直接匹配失败，检查是否为多实例面板（格式：panelName_instanceId）
+  const multiInstanceMatch = componentName.match(/^(.+)_\d+$/);
+  if (multiInstanceMatch) {
+    const basePanelName = multiInstanceMatch[1];
+    config = configs.find(panel => panel.name === basePanelName);
+    if (config) {
+      console.log(`[CesiumMain] 🔄 多实例面板 ${componentName} 使用基础配置 ${basePanelName}`);
+      return config;
+    }
+  }
+
+  return null;
 }
 
 export default {
@@ -570,7 +588,11 @@ export default {
       // ⭐ 动态加载的功能面板组件缓存
       functionPanelComponents: {}, // 运行时动态加载的组件缓存
       // ⭐ 正在加载中的组件
-      loadingComponents: {} // componentName -> Promise
+      loadingComponents: {}, // componentName -> Promise
+      // ⭐ 多实例面板计数器
+      _panelInstanceCounter: 0,
+      // ⭐ 强制刷新面板列表的计数器
+      _panelsRefreshCounter: 0
     };
   },
   computed: {
@@ -579,6 +601,9 @@ export default {
      */
     visibleFunctionPanels() {
       const panels = [];
+
+      // ⭐ 访问刷新计数器以建立依赖关系
+      const __ = this._panelsRefreshCounter;
 
       // 1. 获取已注册且可见的面板（单实例模式）
       for (const [key, config] of Object.entries(this.registeredPanels)) {
@@ -607,7 +632,14 @@ export default {
       // 3. ⭐ 获取动态面板实例（多实例模式）
       const instanceId = this.instanceId || 1;
       const dynamicInstances = multiInstancePanelConfigManager.getVisiblePanelInstances(instanceId);
+      console.log(`[CesiumMain] 🔍 获取到 ${dynamicInstances.length} 个动态面板实例`, dynamicInstances);
       for (const instance of dynamicInstances) {
+        console.log(`[CesiumMain] 🔍 面板实例详情:`, {
+          key: `${instance.panelName}_${instance.panelInstanceId}`,
+          hasComponent: !!instance.component,
+          componentType: typeof instance.component,
+          props: instance.props
+        });
         panels.push({
           key: `${instance.panelName}_${instance.panelInstanceId}`, // 唯一键
           component: instance.component,
@@ -852,6 +884,15 @@ export default {
     togglePanel(key) {
       if (this.registeredPanels[key]) {
         this.registeredPanels[key].visible = !this.registeredPanels[key].visible;
+
+        // 如果面板重新打开，重置 isClosed 状态
+        if (this.registeredPanels[key].visible && this.registeredPanels[key].component) {
+          this.$nextTick(() => {
+            if (this.registeredPanels[key].component?.isClosed !== undefined) {
+              this.registeredPanels[key].component.isClosed = false;
+            }
+          });
+        }
       }
     },
 
@@ -872,6 +913,9 @@ export default {
         const instanceId = this.instanceId || 1;
         multiInstancePanelConfigManager.unregisterPanelInstance(instanceId, panelName, panelInstanceId);
         console.log(`[CesiumMain] 🗑️ 动态面板实例已注销: ${panelKey}`);
+        // 触发响应式更新
+        this._panelsRefreshCounter++;
+        this.$forceUpdate();
         return;
       }
 
@@ -921,13 +965,20 @@ export default {
       const { panelId, visible, singleton, action } = event;
       console.log(`[CesiumMain] 🔧 工具栏面板切换: ${panelId}, 可见性: ${visible}, 单例: ${singleton}`);
 
-      // 检查面板是否已注册
+      // ⭐ 多实例模式：每次点击都创建新实例
+      if (!singleton && visible) {
+        console.log(`[CesiumMain] 🧬 多实例模式：创建新面板实例 - ${panelId}`);
+        this.createMultiInstancePanel(panelId);
+        return;
+      }
+
+      // ⭐ 单例模式：检查面板是否已注册
       if (this.registeredPanels[panelId]) {
         // 已注册：更新可见性
-        this.registeredPanels[panelId].visible = visible;
+        this.$set(this.registeredPanels[panelId], 'visible', visible);
         console.log(`[CesiumMain] 🔄 ${panelId} 可见性: ${visible ? '显示' : '隐藏'}`);
-      } else {
-        // 未注册：动态加载组件
+      } else if (visible) {
+        // 未注册且需要显示：动态加载组件
         console.log(`[CesiumMain] 📦 首次加载面板组件: ${panelId}`);
         this.loadFunctionPanel(panelId)
           .then(() => {
@@ -936,6 +987,59 @@ export default {
           .catch((error) => {
             console.error(`[CesiumMain] ❌ ${panelId} 组件加载失败:`, error);
           });
+      }
+    },
+
+    /**
+     * 创建多实例面板
+     * @param {string} panelId - 面板ID
+     */
+    async createMultiInstancePanel(panelId) {
+      try {
+        // 动态加载组件（如果还没加载）
+        if (!this.functionPanelComponents[panelId]) {
+          console.log(`[CesiumMain] 📦 加载面板组件: ${panelId}`);
+          await this.loadFunctionPanel(panelId);
+        }
+
+        const Component = this.functionPanelComponents[panelId];
+        if (!Component) {
+          console.error(`[CesiumMain] ❌ 组件加载失败: ${panelId}`);
+          return;
+        }
+
+        // 生成面板实例ID
+        const panelInstanceId = ++this._panelInstanceCounter;
+
+        // 计算位置偏移
+        const existingCount = multiInstancePanelConfigManager.getVisiblePanelInstances(this.instanceId || 1)
+          .filter(p => p.panelName === panelId).length;
+        const offsetX = 40 * existingCount;
+        const offsetY = 40 * existingCount;
+
+        // 注册面板实例到管理器
+        const instanceKey = multiInstancePanelConfigManager.registerPanelInstance(
+          this.instanceId || 1,
+          panelId,
+          {
+            component: Component,
+            props: {
+              initialX: typeof offsetX === 'number' ? 100 + offsetX : 'center',
+              initialY: 80 + offsetY,
+              panelInstanceId: panelInstanceId // 传递实例ID
+            },
+            visible: true
+          },
+          panelInstanceId
+        );
+
+        console.log(`[CesiumMain] ✅ 多实例面板已创建: ${instanceKey}`);
+
+        // 触发响应式更新
+        this._panelsRefreshCounter++;
+        this.$forceUpdate();
+      } catch (error) {
+        console.error(`[CesiumMain] ❌ 创建多实例面板失败: ${error}`);
       }
     },
 

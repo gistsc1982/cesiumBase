@@ -173,12 +173,23 @@ export default {
           id: 'oblique-photo-example',
           icon: '🧪',
           label: '测试面板',
-          tooltip: '测试 JsonConfigPanelBase（继承示例）',
+          tooltip: '测试 JsonConfigPanelBase（单例模式）',
           disabled: false,
           ariaLabel: '测试面板',
           action: 'toggle-panel',
           panelId: 'ObliquePhotographyPanelExample',
           singleton: true
+        },
+        {
+          id: 'multi-instance-panel',
+          icon: '🧬',
+          label: '多实例',
+          tooltip: '测试 JsonConfigPanelBase 多实例模式',
+          disabled: false,
+          ariaLabel: '多实例测试面板',
+          action: 'toggle-panel',
+          panelId: 'ObliquePhotographyPanelExample',
+          singleton: false
         },
         {
           id: 'testsfc-modal',

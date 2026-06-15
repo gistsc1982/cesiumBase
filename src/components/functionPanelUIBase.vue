@@ -562,13 +562,10 @@ export default {
           }
 
           // ⚠️ 单例模式：不注销组件，只隐藏
-          // 重置关闭状态，以便下次打开
-          this.$nextTick(() => {
-            this.isClosed = false;
-          });
+          // 面板将保持关闭状态，直到通过 visible prop 重新打开
         }, 300);
       } else if (isMultiInstance) {
-        // ⭐ 多实例面板模式：注销面板实例
+        // ⭐ 多实例面板模式：通过父组件注销面板实例
         console.log(`[FunctionPanelUIBase] 🗑️ 多实例面板注销: ${this.registrationKey || this.componentName} #${panelInstanceId}`);
         this.isClosed = true;
 
@@ -577,19 +574,9 @@ export default {
           this.cleanup();
         }
 
-        // ⭐ 通过多实例管理器注销面板实例
-        if (this.unregisterPanelInstance && typeof this.unregisterPanelInstance === 'function') {
-          this.unregisterPanelInstance(this.registrationKey || this.componentName, panelInstanceId);
-          console.log(`[FunctionPanelUIBase] ✅ 已注销面板实例: ${this.registrationKey || this.componentName} #${panelInstanceId}`);
-        } else if (this.multiInstanceManager) {
-          // 回退方案：直接使用管理器
-          const instanceId = this.getInstanceId ? this.getInstanceId() : 1;
-          this.multiInstanceManager.unregisterPanelInstance(instanceId, this.registrationKey || this.componentName, panelInstanceId);
-          console.log(`[FunctionPanelUIBase] ✅ 已注销面板实例（直接使用管理器）`);
-        }
-
         // 等待关闭动画完成
         setTimeout(() => {
+          // 通过 close 事件通知父组件注销面板实例
           this.$emit('close', { preserveData: false });
 
           if (typeof window !== 'undefined') {
