@@ -217,6 +217,22 @@ export default {
       }
     }
 
+    // ⭐ 添加事件监听器，监听 PanelSingletonManager 中的状态变化
+    // （单例面板组件不会被销毁，需要持续同步状态）
+    this._panelStateChangeListener = (eventData) => {
+      // ⭐ 检查事件是否针对当前面板实例
+      // 优先匹配 registrationKey（如果有），其次匹配 componentName
+      const targetPanelName = this.registrationKey || this.componentName;
+      if (eventData.panelName !== targetPanelName) {
+        return; // 不是当前面板的事件，忽略
+      }
+      console.log(`[FunctionPanelUIBase] 🔔 监听到 PanelSingletonManager 事件: ${targetPanelName}`, eventData);
+      if (eventData.type === 'visibleChange' && this.isClosed !== eventData.isClosed) {
+        this.isClosed = eventData.isClosed;
+      }
+    };
+    panelSingletonManager.addEventListener(panelName, this._panelStateChangeListener);
+
     this.initCesium(() => {
       this.$nextTick(() => {
         this.initPosition();
@@ -241,6 +257,13 @@ export default {
     if (this.boundHandleKeydown) {
       document.removeEventListener('keydown', this.boundHandleKeydown);
     }
+
+    // ⭐ 移除 PanelSingletonManager 事件监听器
+    const panelName = this.registrationKey || this.componentName;
+    if (this._panelStateChangeListener) {
+      panelSingletonManager.removeEventListener(panelName, this._panelStateChangeListener);
+    }
+
     this.cleanup();
   },
   methods: {
@@ -560,9 +583,9 @@ export default {
           this.cleanup();
         }
 
-        // ⭐ 使用 PanelSingletonManager 记录面板可见性状态
-        panelSingletonManager.setPanelVisible(this.registrationKey || this.componentName, false);
-        console.log(`[FunctionPanelUIBase] ✅ 已通过 PanelSingletonManager 设置面板 ${this.registrationKey || this.componentName} 可见性为 false`);
+        // ⭐ 使用 PanelSingletonManager 更新面板注册表状态（统一使用 updatePanelVisible）
+        panelSingletonManager.updatePanelVisible(this.registrationKey || this.componentName, false);
+        console.log(`[FunctionPanelUIBase] ✅ 已通过 PanelSingletonManager 更新面板 ${this.registrationKey || this.componentName} 可见性为 false`);
 
         // ⭐ 更新面板可见性（通过 inject 的 setPanelVisible 方法）
         if (this.setPanelVisible && typeof this.setPanelVisible === 'function') {

@@ -44,6 +44,10 @@ class PanelSingletonManager {
     // Map<panelName, { component, props, visible, isClosed }>
     this.panelRegistry = new Map();
 
+    // ⭐ 事件监听器（用于面板状态变化通知）
+    // Map<panelName, Set<callback>>
+    this.eventListeners = new Map();
+
     console.log('[PanelSingletonManager] 初始化完成');
   }
 
@@ -169,22 +173,14 @@ class PanelSingletonManager {
   }
 
   /**
-   * 设置面板可见性
+   * 设置面板可见性（通过注册表）
+   * ⭐ 此方法为兼容保留，建议使用 updatePanelVisible()
    * @param {string} panelName - 面板名称
    * @param {boolean} visible - 是否可见
    */
   setPanelVisible(panelName, visible) {
-    this.panelVisibility.set(panelName, visible);
-    console.log(`[PanelSingletonManager] 👁️ 设置面板可见性: ${panelName} = ${visible}`);
-  }
-
-  /**
-   * 获取面板可见性
-   * @param {string} panelName - 面板名称
-   * @returns {boolean|undefined} 面板可见性
-   */
-  getPanelVisible(panelName) {
-    return this.panelVisibility.get(panelName);
+    // ⭐ 重定向到 updatePanelVisible 以保持同步
+    this.updatePanelVisible(panelName, visible);
   }
 
   /**
@@ -311,11 +307,21 @@ class PanelSingletonManager {
     const panel = this.panelRegistry.get(panelName);
     if (panel) {
       panel.visible = visible;
-      // 如果设置为可见，同时重置 isClosed 状态
+      // ⭐ 同步 isClosed 状态：visible = false 时设置 isClosed = true，visible = true 时重置 isClosed = false
       if (visible) {
         panel.isClosed = false;
+      } else {
+        panel.isClosed = true;
       }
       console.log(`[PanelSingletonManager] 🔄 更新面板可见性: ${panelName} = ${visible}, isClosed = ${panel.isClosed}`);
+
+      // ⭐ 触发面板状态变化事件（通知组件同步状态）
+      this.emitEvent(panelName, {
+        type: 'visibleChange',
+        panelName,
+        visible,
+        isClosed: panel.isClosed
+      });
     } else {
       console.warn(`[PanelSingletonManager] ⚠️ 面板 ${panelName} 未注册，无法更新可见性`);
     }
@@ -375,6 +381,51 @@ class PanelSingletonManager {
   clearRegistry() {
     this.panelRegistry.clear();
     console.log('[PanelSingletonManager] 🗑️ 清空面板注册表');
+  }
+
+  // ==================== 事件监听器 ====================
+
+  /**
+   * 添加面板状态变化监听器
+   * @param {string} panelName - 面板名称
+   * @param {Function} callback - 回调函数
+   */
+  addEventListener(panelName, callback) {
+    if (!this.eventListeners.has(panelName)) {
+      this.eventListeners.set(panelName, new Set());
+    }
+    this.eventListeners.get(panelName).add(callback);
+    console.log(`[PanelSingletonManager] 📝 添加事件监听器: ${panelName}`);
+  }
+
+  /**
+   * 移除面板状态变化监听器
+   * @param {string} panelName - 面板名称
+   * @param {Function} callback - 回调函数
+   */
+  removeEventListener(panelName, callback) {
+    if (this.eventListeners.has(panelName)) {
+      this.eventListeners.get(panelName).delete(callback);
+      console.log(`[PanelSingletonManager] 🗑️ 移除事件监听器: ${panelName}`);
+    }
+  }
+
+  /**
+   * 触发面板状态变化事件
+   * @param {string} panelName - 面板名称
+   * @param {Object} eventData - 事件数据
+   */
+  emitEvent(panelName, eventData) {
+    if (this.eventListeners.has(panelName)) {
+      const listeners = this.eventListeners.get(panelName);
+      listeners.forEach(callback => {
+        try {
+          callback(eventData);
+        } catch (error) {
+          console.error(`[PanelSingletonManager] ❌ 事件监听器执行错误: ${panelName}`, error);
+        }
+      });
+    }
   }
 }
 

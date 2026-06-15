@@ -961,6 +961,8 @@ export default {
         // Vue 3: 直接赋值即可（Proxy 自动处理响应式）
         this.registeredPanels[key].visible = visible;
         console.log('[CesiumMain] 设置面板可见性:', key, visible);
+        // ⭐ 同步到 panelSingletonManager
+        panelSingletonManager.updatePanelVisible(key, visible);
       }
     },
 
@@ -972,6 +974,9 @@ export default {
       if (this.registeredPanels[key]) {
         this.registeredPanels[key].visible = !this.registeredPanels[key].visible;
 
+        // ⭐ 同步到 panelSingletonManager
+        panelSingletonManager.updatePanelVisible(key, this.registeredPanels[key].visible);
+
         // 如果面板重新打开，重置 isClosed 状态
         if (this.registeredPanels[key].visible && this.registeredPanels[key].component) {
           this.$nextTick(() => {
@@ -981,6 +986,23 @@ export default {
           });
         }
       }
+    },
+
+    /**
+     * 同步面板配置到服务器
+     * @param {string} panelKey - 面板唯一标识
+     * @param {boolean} visible - 是否可见
+     * @returns {Promise} Promise 对象
+     */
+    syncPanelConfigToServer(panelKey, visible) {
+      // ⭐ 返回 Promise 以支持异步操作
+      return new Promise((resolve) => {
+        console.log(`[CesiumMain] 🔄 同步面板配置到服务器: ${panelKey}, visible: ${visible}`);
+        // ⭐ 同步到 panelSingletonManager
+        panelSingletonManager.updatePanelVisible(panelKey, visible);
+        // TODO: 实现真正的服务器同步逻辑
+        resolve();
+      });
     },
 
     /**

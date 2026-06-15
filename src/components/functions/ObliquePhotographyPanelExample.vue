@@ -9,7 +9,7 @@
     :initial-y="initialY"
     close-event-name="obliquePhotographyPanelClose"
     config-id="oblique-photography"
-    panel-name="ObliquePhotographyPanel"
+    panel-name="ObliquePhotographyPanelExample"
     :field-definitions="fieldDefinitions"
     :default-form-values="defaultFormValues"
     :toolbar-buttons="toolbarButtons"
