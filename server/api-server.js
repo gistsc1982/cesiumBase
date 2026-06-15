@@ -73,6 +73,30 @@ async function initDatabase() {
 
     await dbManager.init();
     console.log('✅ 数据库已就绪');
+
+    // ⭐ 智能同步：只导入文件系统中有但数据库中没有的配置
+    console.log('📥 检查文件系统中的新配置...');
+    try {
+      const syncResult = await dbManager.smartSyncFromFilesystem();
+
+      if (syncResult.imported.length > 0) {
+        console.log(`✅ 已导入 ${syncResult.imported.length} 个新配置:`);
+        syncResult.imported.forEach(item => {
+          console.log(`   - ${item.path} → ${item.tableName}`);
+        });
+      } else {
+        console.log('ℹ️ 没有新的配置需要导入');
+      }
+
+      if (syncResult.skipped.length > 0) {
+        console.log(`⏭️ 跳过 ${syncResult.skipped.length} 个已存在的配置`);
+      }
+    } catch (syncError) {
+      console.error('⚠️ 智能同步出现问题:', syncError.message);
+      // 不影响服务器启动，继续运行
+    }
+
+    console.log('🚀 API 服务器准备就绪');
   } catch (error) {
     console.error('❌ 数据库初始化失败:', error);
     process.exit(1);

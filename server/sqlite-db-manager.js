@@ -187,13 +187,23 @@ class DatabaseManager {
    * 例如: gis/oblique_photography.json → gis_oblique_photography
    */
   pathToTableName(relativePath) {
-    // 规范化路径分隔符
-    const normalized = relativePath.replace(/\\/g, '/');
+    if (!relativePath) {
+      console.warn('⚠️ pathToTableName: relativePath 为空或 undefined');
+      return '';
+    }
 
-    return normalized
-      .replace(/\.json$/i, '')           // 移除 .json 扩展名
-      .replace(/\//g, '_')               // 替换 / 为 _
-      .toLowerCase();
+    try {
+      // 规范化路径分隔符
+      const normalized = relativePath.replace(/\\/g, '/');
+
+      return normalized
+        .replace(/\.json$/i, '')           // 移除 .json 扩展名
+        .replace(/\//g, '_')               // 替换 / 为 _
+        .toLowerCase();
+    } catch (error) {
+      console.error(`❌ pathToTableName 转换失败: ${relativePath}`, error.message);
+      return '';
+    }
   }
 
   /**
@@ -346,7 +356,19 @@ class DatabaseManager {
    */
   loadConfig(relativePath) {
     try {
+      // 验证参数
+      if (!relativePath) {
+        console.warn('⚠️ loadConfig: relativePath 为空');
+        return null;
+      }
+
       const tableName = this.pathToTableName(relativePath);
+
+      // 如果转换失败，返回 null
+      if (!tableName) {
+        console.warn(`⚠️ loadConfig: 无法转换路径 "${relativePath}" 为表名`);
+        return null;
+      }
 
       // 检查表是否存在
       const tableExists = this.db.prepare(`
@@ -459,10 +481,20 @@ class DatabaseManager {
 
       for (const config of configs) {
         try {
-          const data = this.loadConfig(config.path);
-          if (!data) continue;
+          // 使用正确的属性名：config.filePath
+          const configPath = config.filePath || config.path;
+          if (!configPath) {
+            console.warn(`⚠️ 跳过无效配置: ${JSON.stringify(config)}`);
+            continue;
+          }
 
-          const filePath = path.join(this.options.dataDir, config.path);
+          const data = this.loadConfig(configPath);
+          if (!data) {
+            console.warn(`⚠️ 无法加载配置: ${configPath}`);
+            continue;
+          }
+
+          const filePath = path.join(this.options.dataDir, configPath);
           const dir = path.dirname(filePath);
 
           // 确保目录存在
@@ -473,18 +505,18 @@ class DatabaseManager {
           await fs.writeFile(filePath, jsonData, 'utf8');
 
           results.push({
-            path: config.path,
+            path: configPath,
             success: true
           });
 
-          console.log(`📤 已同步: ${config.path}`);
+          console.log(`📤 已同步: ${configPath}`);
         } catch (error) {
           results.push({
-            path: config.path,
+            path: config.filePath || config.path || 'unknown',
             success: false,
             error: error.message
           });
-          console.error(`❌ 同步失败: ${config.path}`, error);
+          console.error(`❌ 同步失败: ${config.fileName}`, error);
         }
       }
 
@@ -648,6 +680,111 @@ class DatabaseManager {
     } catch (error) {
       console.error('❌ 获取统计失败:', error);
       return null;
+    }
+  }
+
+  /**
+   * 智能同步：只导入文件系统中有但数据库中没有的配置
+   * 不会覆盖已存在的数据库表
+   */
+  async smartSyncFromFilesystem() {
+    try {
+      const fs = require('fs').promises;
+      const results = {
+        imported: [],
+        skipped: [],
+        failed: []
+      };
+
+      // 获取数据库中已存在的表
+      const existingTables = new Set();
+      const tables = this.db.prepare(`
+        SELECT name FROM sqlite_master
+        WHERE type='table' AND name NOT LIKE '\\_%' ESCAPE '\\' AND name NOT LIKE 'sqlite_%'
+      `).all();
+      tables.forEach(t => existingTables.add(t.name));
+
+      console.log(`📊 数据库中已有的表: ${existingTables.size} 个`);
+
+      // ⭐ 保存 this 引用，避免在嵌套函数中丢失上下文
+      const self = this;
+
+      // 递归扫描 data 目录
+      async function scanDir(dir, relativePath = '') {
+        const entries = await fs.readdir(dir, { withFileTypes: true });
+
+        for (const entry of entries) {
+          const fullPath = path.join(dir, entry.name);
+          // 使用 / 作为路径分隔符（跨平台兼容）
+          const relPath = relativePath ? `${relativePath}/${entry.name}` : entry.name;
+
+          if (entry.isDirectory()) {
+            await scanDir(fullPath, relPath);
+          } else if (entry.isFile() && (entry.name.endsWith('.json'))) {
+            // 检查文件名是否符合命名规范
+            const fileName = entry.name;
+            const nameWithoutExt = fileName.replace(/\.json$/i, '');
+
+            // 命名规范：只允许小写字母、数字、下划线
+            if (!/^[a-z0-9_]+$/.test(nameWithoutExt)) {
+              results.skipped.push({
+                path: relPath,
+                fileName: fileName,
+                reason: '文件名不符合命名规范'
+              });
+              continue;
+            }
+
+            // 计算对应的表名
+            const tableName = self.pathToTableName(relPath);
+
+            // 检查表是否已存在
+            if (existingTables.has(tableName)) {
+              results.skipped.push({
+                path: relPath,
+                fileName: fileName,
+                reason: '数据库表已存在'
+              });
+              console.log(`⏭️ 跳过: ${relPath} (表已存在)`);
+              continue;
+            }
+
+            // 表不存在，导入文件
+            try {
+              const content = await fs.readFile(fullPath, 'utf8');
+              const data = JSON.parse(content);
+
+              self.saveConfig(relPath, data);
+
+              results.imported.push({
+                path: relPath,
+                tableName: tableName
+              });
+
+              console.log(`📥 已导入: ${relPath} → ${tableName}`);
+            } catch (error) {
+              results.failed.push({
+                path: relPath,
+                fileName: fileName,
+                error: error.message
+              });
+              console.error(`❌ 导入失败: ${relPath}`, error.message);
+            }
+          }
+        }
+      }
+
+      await scanDir(this.options.dataDir);
+
+      console.log(`\n📊 智能同步完成:`);
+      console.log(`  ✅ 新导入: ${results.imported.length} 个`);
+      console.log(`  ⏭️ 跳过: ${results.skipped.length} 个`);
+      console.log(`  ❌ 失败: ${results.failed.length} 个`);
+
+      return results;
+    } catch (error) {
+      console.error('❌ 智能同步失败:', error);
+      throw error;
     }
   }
 }
