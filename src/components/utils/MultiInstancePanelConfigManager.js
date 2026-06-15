@@ -35,6 +35,16 @@ class MultiInstancePanelConfigManager {
     // Map<instanceId, Map<panelName, panelConfig>>
     this.instanceConfigs = new Map();
 
+    // ⭐ 多实例面板运行时管理
+    // 用于管理动态创建的面板实例（如 TestSfc 多实例）
+    // Map<instanceKey, panelInstance>
+    // instanceKey 格式: `${instanceId}_${panelName}_${panelInstanceId}`
+    this.panelInstances = new Map();
+
+    // ⭐ 面板实例计数器（为每个面板类型维护独立的计数器）
+    // Map<panelName, counter>
+    this.panelInstanceCounters = new Map();
+
     // 实例计数器
     this.instanceCounter = 0;
 
@@ -341,8 +351,261 @@ class MultiInstancePanelConfigManager {
    */
   reset() {
     this.instanceConfigs.clear();
+    this.panelInstances.clear();
+    this.panelInstanceCounters.clear();
     this.instanceCounter = 0;
     console.log('[MultiInstancePanelConfigManager] 🔄 已重置所有实例配置');
+  }
+
+  // ==================== 多实例面板运行时管理 ====================
+
+  /**
+   * 生成唯一面板实例键
+   * @private
+   * @param {number} instanceId - CesiumMain 实例ID
+   * @param {string} panelName - 面板名称
+   * @param {number} panelInstanceId - 面板实例ID（可选，用于多实例面板）
+   * @returns {string} 唯一键
+   */
+  _generateInstanceKey(instanceId, panelName, panelInstanceId = null) {
+    if (panelInstanceId !== null) {
+      return `${instanceId}_${panelName}_${panelInstanceId}`;
+    }
+    return `${instanceId}_${panelName}`;
+  }
+
+  /**
+   * 注册面板实例（用于动态创建的多实例面板）
+   * @param {number} instanceId - CesiumMain 实例ID
+   * @param {string} panelName - 面板名称
+   * @param {Object} config - 面板配置
+   * @param {Object} config.component - 组件实例
+   * @param {Object} config.props - 组件属性
+   * @param {boolean} config.visible - 是否可见
+   * @param {number} panelInstanceId - 面板实例ID（可选，默认自动生成）
+   * @returns {string} 面板实例键
+   */
+  registerPanelInstance(instanceId, panelName, config, panelInstanceId = null) {
+    // 如果没有提供面板实例ID，自动生成
+    if (panelInstanceId === null) {
+      const counter = this.panelInstanceCounters.get(panelName) || 0;
+      panelInstanceId = counter + 1;
+      this.panelInstanceCounters.set(panelName, panelInstanceId);
+    }
+
+    const instanceKey = this._generateInstanceKey(instanceId, panelName, panelInstanceId);
+
+    // 计算位置偏移（如果是多实例面板）
+    const position = config.props?.position || this._calculateMultiInstancePanelPosition(
+      instanceId,
+      panelName,
+      panelInstanceId,
+      config.props
+    );
+
+    this.panelInstances.set(instanceKey, {
+      instanceId,
+      panelName,
+      panelInstanceId,
+      component: config.component,
+      props: {
+        ...config.props,
+        position
+      },
+      visible: config.visible !== false,
+      createdAt: Date.now()
+    });
+
+    console.log(`[MultiInstancePanelConfigManager] ✅ 注册面板实例: ${instanceKey}`, {
+      位置: position,
+      可见: this.panelInstances.get(instanceKey).visible
+    });
+
+    return instanceKey;
+  }
+
+  /**
+   * 注销面板实例
+   * @param {number} instanceId - CesiumMain 实例ID
+   * @param {string} panelName - 面板名称
+   * @param {number} panelInstanceId - 面板实例ID（可选）
+   */
+  unregisterPanelInstance(instanceId, panelName, panelInstanceId = null) {
+    if (panelInstanceId === null) {
+      // 如果没有指定面板实例ID，删除该面板的所有实例
+      let deletedCount = 0;
+      for (const [key, instance] of this.panelInstances.entries()) {
+        if (instance.instanceId === instanceId && instance.panelName === panelName) {
+          this.panelInstances.delete(key);
+          deletedCount++;
+        }
+      }
+      console.log(`[MultiInstancePanelConfigManager] 🗑️ 注销面板 ${panelName} 的 ${deletedCount} 个实例`);
+      return;
+    }
+
+    const instanceKey = this._generateInstanceKey(instanceId, panelName, panelInstanceId);
+    const deleted = this.panelInstances.delete(instanceKey);
+
+    if (deleted) {
+      console.log(`[MultiInstancePanelConfigManager] 🗑️ 注销面板实例: ${instanceKey}`);
+    } else {
+      console.warn(`[MultiInstancePanelConfigManager] ⚠️ 未找到面板实例: ${instanceKey}`);
+    }
+  }
+
+  /**
+   * 获取面板实例
+   * @param {number} instanceId - CesiumMain 实例ID
+   * @param {string} panelName - 面板名称
+   * @param {number} panelInstanceId - 面板实例ID（可选）
+   * @returns {Object|null} 面板实例配置
+   */
+  getPanelInstance(instanceId, panelName, panelInstanceId = null) {
+    if (panelInstanceId === null) {
+      // 返回第一个匹配的实例
+      for (const [key, instance] of this.panelInstances.entries()) {
+        if (instance.instanceId === instanceId && instance.panelName === panelName) {
+          return instance;
+        }
+      }
+      return null;
+    }
+
+    const instanceKey = this._generateInstanceKey(instanceId, panelName, panelInstanceId);
+    return this.panelInstances.get(instanceKey) || null;
+  }
+
+  /**
+   * 获取实例的所有动态面板
+   * @param {number} instanceId - CesiumMain 实例ID
+   * @returns {Array<Object>} 面板实例列表
+   */
+  getAllPanelInstances(instanceId) {
+    const instances = [];
+    for (const instance of this.panelInstances.values()) {
+      if (instance.instanceId === instanceId) {
+        instances.push(instance);
+      }
+    }
+    return instances;
+  }
+
+  /**
+   * 获取实例的所有可见动态面板
+   * @param {number} instanceId - CesiumMain 实例ID
+   * @returns {Array<Object>} 可见面板实例列表
+   */
+  getVisiblePanelInstances(instanceId) {
+    return this.getAllPanelInstances(instanceId).filter(instance => instance.visible);
+  }
+
+  /**
+   * 设置面板实例可见性
+   * @param {number} instanceId - CesiumMain 实例ID
+   * @param {string} panelName - 面板名称
+   * @param {boolean} visible - 是否可见
+   * @param {number} panelInstanceId - 面板实例ID（可选）
+   */
+  setPanelInstanceVisible(instanceId, panelName, visible, panelInstanceId = null) {
+    if (panelInstanceId === null) {
+      // 设置该面板的所有实例的可见性
+      for (const instance of this.panelInstances.values()) {
+        if (instance.instanceId === instanceId && instance.panelName === panelName) {
+          instance.visible = visible;
+        }
+      }
+      console.log(`[MultiInstancePanelConfigManager] 🔄 设置面板 ${panelName} 的所有实例可见性: ${visible}`);
+      return;
+    }
+
+    const instance = this.getPanelInstance(instanceId, panelName, panelInstanceId);
+    if (instance) {
+      instance.visible = visible;
+      console.log(`[MultiInstancePanelConfigManager] 🔄 设置面板实例可见性: ${panelName} #${panelInstanceId} = ${visible}`);
+    }
+  }
+
+  /**
+   * 切换面板实例可见性
+   * @param {number} instanceId - CesiumMain 实例ID
+   * @param {string} panelName - 面板名称
+   * @param {number} panelInstanceId - 面板实例ID（可选）
+   * @returns {boolean|null} 切换后的可见性
+   */
+  togglePanelInstanceVisible(instanceId, panelName, panelInstanceId = null) {
+    const instance = this.getPanelInstance(instanceId, panelName, panelInstanceId);
+    if (instance) {
+      instance.visible = !instance.visible;
+      console.log(`[MultiInstancePanelConfigManager] 🔄 切换面板实例可见性: ${panelName} #${panelInstanceId || '*'} = ${instance.visible}`);
+      return instance.visible;
+    }
+    return null;
+  }
+
+  /**
+   * 计算多实例面板的位置偏移
+   * @private
+   * @param {number} instanceId - CesiumMain 实例ID
+   * @param {string} panelName - 面板名称
+   * @param {number} panelInstanceId - 面板实例ID
+   * @param {Object} baseProps - 基础属性
+   * @returns {Object} 位置配置
+   */
+  _calculateMultiInstancePanelPosition(instanceId, panelName, panelInstanceId, baseProps = {}) {
+    // 获取已有实例数量来计算偏移
+    let existingCount = 0;
+    for (const instance of this.panelInstances.values()) {
+      if (instance.panelName === panelName) {
+        existingCount++;
+      }
+    }
+
+    const baseX = baseProps.initialX !== undefined ? baseProps.initialX : 'center';
+    const baseY = baseProps.initialY !== undefined ? baseProps.initialY : 80;
+
+    // 计算偏移量
+    const offsetX = 40 * (instanceId - 1); // CesiumMain 实例偏移
+    const offsetY = 40 * existingCount; // 同类型面板实例偏移
+
+    let initialX = baseX;
+    if (typeof baseX === 'number') {
+      initialX = baseX + offsetX;
+    } else if (baseX === 'center') {
+      initialX = 'center';
+    }
+
+    const initialY = baseY + offsetY;
+
+    return { initialX, initialY };
+  }
+
+  /**
+   * 获取面板实例统计信息
+   * @returns {Object} 统计信息
+   */
+  getPanelInstanceStats() {
+    const stats = {
+      总面板实例数: this.panelInstances.size,
+      按面板类型统计: {},
+      按CesiumMain实例统计: {}
+    };
+
+    for (const instance of this.panelInstances.values()) {
+      // 按面板类型统计
+      if (!stats.按面板类型统计[instance.panelName]) {
+        stats.按面板类型统计[instance.panelName] = 0;
+      }
+      stats.按面板类型统计[instance.panelName]++;
+
+      // 按CesiumMain实例统计
+      if (!stats.按CesiumMain实例统计[instance.instanceId]) {
+        stats.按CesiumMain实例统计[instance.instanceId] = 0;
+      }
+      stats.按CesiumMain实例统计[instance.instanceId]++;
+    }
+
+    return stats;
   }
 }
 

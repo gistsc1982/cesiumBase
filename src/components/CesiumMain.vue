@@ -389,8 +389,45 @@ export default {
       unregisterPanelComponent: (key) => self.unregisterPanelComponent(key),
       // 提供获取已注册面板的方法
       getRegisteredPanels: () => self.registeredPanels,
+      // ⭐ 提供设置面板可见性的方法
+      setPanelVisible: (key, visible) => self.setPanelVisible(key, visible),
       // ⭐ 提供获取实例ID的函数
-      getInstanceId: () => self.instanceId || 1
+      getInstanceId: () => self.instanceId || 1,
+      // ==================== 多实例面板管理 ====================
+      // ⭐ 提供多实例面板管理器
+      multiInstanceManager: multiInstancePanelConfigManager,
+      // ⭐ 提供注册面板实例的方法
+      registerPanelInstance: (panelName, config, panelInstanceId) => {
+        const instanceId = self.instanceId || 1;
+        const instanceKey = multiInstancePanelConfigManager.registerPanelInstance(
+          instanceId,
+          panelName,
+          config,
+          panelInstanceId
+        );
+        // 触发响应式更新
+        self.$forceUpdate();
+        return instanceKey;
+      },
+      // ⭐ 提供注销面板实例的方法
+      unregisterPanelInstance: (panelName, panelInstanceId) => {
+        const instanceId = self.instanceId || 1;
+        multiInstancePanelConfigManager.unregisterPanelInstance(instanceId, panelName, panelInstanceId);
+        // 触发响应式更新
+        self.$forceUpdate();
+      },
+      // ⭐ 提供获取面板实例的方法
+      getPanelInstance: (panelName, panelInstanceId) => {
+        const instanceId = self.instanceId || 1;
+        return multiInstancePanelConfigManager.getPanelInstance(instanceId, panelName, panelInstanceId);
+      },
+      // ⭐ 提供设置面板实例可见性的方法
+      setPanelInstanceVisible: (panelName, visible, panelInstanceId) => {
+        const instanceId = self.instanceId || 1;
+        multiInstancePanelConfigManager.setPanelInstanceVisible(instanceId, panelName, visible, panelInstanceId);
+        // 触发响应式更新
+        self.$forceUpdate();
+      }
     };
   },
   beforeCreate() {
@@ -538,12 +575,12 @@ export default {
   },
   computed: {
     /**
-     * 获取所有可见的功能面板（包括预注册的）
+     * 获取所有可见的功能面板（包括预注册的、已注册的和动态面板实例）
      */
     visibleFunctionPanels() {
       const panels = [];
 
-      // 1. 获取已注册且可见的面板
+      // 1. 获取已注册且可见的面板（单实例模式）
       for (const [key, config] of Object.entries(this.registeredPanels)) {
         if (config.visible) {
           panels.push({
@@ -565,6 +602,19 @@ export default {
             props: {}
           });
         }
+      }
+
+      // 3. ⭐ 获取动态面板实例（多实例模式）
+      const instanceId = this.instanceId || 1;
+      const dynamicInstances = multiInstancePanelConfigManager.getVisiblePanelInstances(instanceId);
+      for (const instance of dynamicInstances) {
+        panels.push({
+          key: `${instance.panelName}_${instance.panelInstanceId}`, // 唯一键
+          component: instance.component,
+          props: instance.props,
+          isDynamicInstance: true,
+          instanceId: instance.panelInstanceId
+        });
       }
 
       return panels;
@@ -789,7 +839,9 @@ export default {
      */
     setPanelVisible(key, visible) {
       if (this.registeredPanels[key]) {
-        this.registeredPanels[key].visible = visible;
+        // ⭐ 使用 $set 确保 Vue 2 响应式更新（直接修改嵌套属性不会触发更新）
+        this.$set(this.registeredPanels[key], 'visible', visible);
+        console.log('[CesiumMain] 设置面板可见性:', key, visible);
       }
     },
 
@@ -804,26 +856,29 @@ export default {
     },
 
     /**
-     * 处理面板关闭事件（动态面板）
-     * @param {string} panelKey - 面板唯一标识
+     * 处理面板关闭事件（支持单实例和多实例面板）
+     * @param {string} panelKey - 面板唯一标识（格式：panelName 或 panelName_instanceId）
      */
     handlePanelClose(panelKey) {
       console.log(`[CesiumMain] 面板关闭: ${panelKey}`);
 
-      // ⭐ ObliquePhotographyPanel 特殊处理：假关闭模式
-      if (panelKey === 'ObliquePhotographyPanel') {
-        console.log(`[CesiumMain] ObliquePhotographyPanel 假关闭，保留实例状态`);
-        // 只设置 visible 为 false，不销毁组件
-        if (this.registeredPanels[panelKey]) {
-          this.registeredPanels[panelKey].visible = false;
-        }
+      // ⭐ 检查是否为动态面板实例（包含 _ 分隔符）
+      if (panelKey.includes('_')) {
+        const parts = panelKey.split('_');
+        const panelInstanceId = parseInt(parts[parts.length - 1]);
+        const panelName = parts.slice(0, -1).join('_');
+
+        // 注销动态面板实例
+        const instanceId = this.instanceId || 1;
+        multiInstancePanelConfigManager.unregisterPanelInstance(instanceId, panelName, panelInstanceId);
+        console.log(`[CesiumMain] 🗑️ 动态面板实例已注销: ${panelKey}`);
         return;
       }
 
-      // 其他面板：正常关闭
-      // 隐藏面板
+      // ⭐ 单实例面板：隐藏面板（备份逻辑，确保面板被隐藏）
       if (this.registeredPanels[panelKey]) {
-        this.registeredPanels[panelKey].visible = false;
+        this.$set(this.registeredPanels[panelKey], 'visible', false);
+        console.log(`[CesiumMain] ✅ 单实例面板已隐藏: ${panelKey}`);
       }
     },
 

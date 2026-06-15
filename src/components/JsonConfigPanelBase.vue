@@ -609,6 +609,28 @@ export default {
       console.log(`[${this.panelName}] ✅ 配置删除完成`);
     },
 
+    /**
+     * 清理组件状态
+     * ⭐ 在单例模式面板关闭时调用，重置所有对话框状态
+     */
+    cleanup() {
+      console.log(`[${this.panelName}] 🧹 清理组件状态（对话框等）`);
+
+      // 重置所有对话框状态
+      this.showAddDialog = false;
+      this.showEditDialog = false;
+      this.showDeleteDialog = false;
+      this.showImportDialog = false;
+
+      // 重置表单数据
+      this.resetForm();
+      this.editingItem = null;
+      this.deleteTarget = null;
+
+      // 重置服务器文件浏览状态
+      this.selectedServerFile = null;
+    },
+
     // ==================== UI 辅助方法（子类覆盖） ====================
 
     /**
@@ -1036,6 +1058,11 @@ export default {
 
     handleClose() {
       console.log(`[${this.panelName}] 面板关闭`);
+
+      // ⭐ 不要重复触发 close 事件，因为父类 FunctionPanelUIBase 已经处理了
+      // 这里只需要清理组件状态即可
+      this.cleanup();
+
       if (typeof window !== 'undefined') {
         const event = new CustomEvent(this.closeEventName, {
           detail: { panelName: this.panelName }
@@ -1208,7 +1235,8 @@ export default {
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 9999;
+  /* ⭐ 确保对话框在面板之上（面板 z-index: 100000） */
+  z-index: 200001;
 }
 
 .dialog {

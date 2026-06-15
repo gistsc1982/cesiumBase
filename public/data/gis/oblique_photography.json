@@ -6,7 +6,12 @@
   },
   {
     "id": "jian1",
-    "name": "吉安1号",
+    "name": "吉安1",
+    "url": "https://wckj2020.obs.cn-south-1.myhuaweicloud.com/wckj/senge/wckj2_merge/Scene/JiAn1_merge.json"
+  },
+  {
+    "id": "qingxie01",
+    "name": "倾斜新增图层1",
     "url": "https://wckj2020.obs.cn-south-1.myhuaweicloud.com/wckj/senge/wckj2_merge/Scene/JiAn1_merge.json"
   }
 ]

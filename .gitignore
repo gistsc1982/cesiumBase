@@ -36,7 +36,7 @@ base-cesium-vue/
 # Build-generated files in test-sfc
 # 忽略不需要的子目录，但保留必需的文件
 public/test-sfc/jsm/
-public/test-sfc/libs/
+# public/test-sfc/libs/  # ⭐ 已移除：libs 目录现在由 git 跟踪
 public/test-sfc/cdn/
 public/test-sfc/output/
 public/test-sfc/plugins/
