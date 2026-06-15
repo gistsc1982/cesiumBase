@@ -1,5 +1,47 @@
 # Claude Code 开发规范
 
+## 🤖 给 Claude 的提示
+
+### 在开始编码任务前，请务必执行以下步骤：
+
+#### 第 1 步：查阅项目规范 ⭐ **强制要求**
+```
+1. 搜索本文档中与任务相关的规范
+2. 确认编码时需要遵守的规则
+3. 了解历史问题和避免方案
+```
+
+#### 第 2 步：快速检查清单
+```bash
+# 搜索相关规范
+grep -n "Vue 3" docs/CLAUDE.md
+grep -n "响应式" docs/CLAUDE.md
+grep -n "性能" docs/CLAUDE.md
+grep -n "Cesium" docs/CLAUDE.md
+```
+
+#### 第 3 步：编码时遵守规范
+- ✅ 严格遵循文档中列出的正确做法
+- ✅ 避免"错误示例"中的模式
+- ✅ 参考"正确示例"实现
+
+#### 第 4 步：修改后自查
+- ✅ 代码是否违反了任何规范
+- ✅ 是否有更好的实现方式
+- ✅ 是否需要更新文档记录新问题
+
+### 快速参考规范索引
+
+| 任务类型 | 查找关键字 | 相关章节 |
+|---------|-----------|---------|
+| Vue 兼容性 | `Vue 3`, `响应式` | §6.5 Vue 3 响应式式更新规范 |
+| 性能优化 | `Cesium`, `$set` | §6.1-6.6 |
+| 变量声明 | `变量`, `重复` | §1 变量重复声明检查 |
+| 事件处理 | `input`, `change` | §6.5 避免频繁触发 Cesium 更新 |
+| 组件嵌套 | `Teleport` | §6.3 Teleport 嵌套冲突 |
+
+---
+
 ## 代码修改检查清单
 
 在修改代码后，必须执行以下检查：
@@ -250,7 +292,52 @@ const tileset = new Cesium.Cesium3DTileset({
 });
 ```
 
-#### 6.4 移除 $set 调用
+#### 6.5 Vue 3 响应式更新规范
+
+**严重程度**: **P1 - 兼容性要求**
+
+**问题**: 使用 Vue 2.x 的 `this.$set` API 会导致性能问题和兼容性警告。
+
+**错误示例**：
+```javascript
+// ❌ 错误：使用 Vue 2 的 $set API
+this.$set(this.registeredPanels[key], 'visible', visible);
+
+// ❌ 错误：导入并使用 Vue 2 的 set 函数
+import { set } from 'vue';
+set(this.object, 'property', value);
+```
+
+**正确做法**：
+```javascript
+// ✅ 正确：Vue 3 直接赋值（Proxy 自动处理响应式）
+this.registeredPanels[key].visible = visible;
+
+// ✅ 对于对象替换（确保响应式）
+this.registeredPanels[key] = {
+  ...this.registeredPanels[key],
+  visible: visible
+};
+
+// ✅ 对于数组替换（触发响应式）
+this.obliquePhotographyList = [...this.obliquePhotographyList];
+```
+
+**原理说明**：
+- Vue 2 使用 `Object.defineProperty` 实现响应式，无法检测新增属性
+- Vue 3 使用 `Proxy` 实现响应式，所有属性操作都是响应式的
+- 在 Vue 3 中使用 `this.$set` 会触发兼容层警告，且性能较差
+
+**性能影响**：
+- `this.$set`: 约 2-3ms （触发兼容层检查）
+- 直接赋值: <0.1ms （原生 Proxy 操作）
+
+**历史记录**：
+| 日期 | 文件 | 问题描述 | 解决方案 |
+|------|------|----------|----------|
+| 2026-06-16 | CesiumMain.vue | 使用 `this.$set` 导致 Vue 警告 | 改为 Vue 3 直接赋值 |
+
+#### 6.6 移除 $set 调用
 
 **严重程度**: **P1 - 重要性能优化**
 

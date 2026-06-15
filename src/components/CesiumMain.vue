@@ -958,8 +958,8 @@ export default {
      */
     setPanelVisible(key, visible) {
       if (this.registeredPanels[key]) {
-        // ⭐ 使用 $set 确保 Vue 2 响应式更新（直接修改嵌套属性不会触发更新）
-        this.$set(this.registeredPanels[key], 'visible', visible);
+        // Vue 3: 直接赋值即可（Proxy 自动处理响应式）
+        this.registeredPanels[key].visible = visible;
         console.log('[CesiumMain] 设置面板可见性:', key, visible);
       }
     },
@@ -1005,11 +1005,14 @@ export default {
         return;
       }
 
-      // ⭐ 单实例面板：隐藏面板（备份逻辑，确保面板被隐藏）
-      if (this.registeredPanels[panelKey]) {
-        this.$set(this.registeredPanels[panelKey], 'visible', false);
-        console.log(`[CesiumMain] ✅ 单实例面板已隐藏: ${panelKey}`);
-      }
+      // ⭐ 单实例面板：同步配置到服务器并隐藏面板
+      this.syncPanelConfigToServer(panelKey, false).then(() => {
+        if (this.registeredPanels[panelKey]) {
+          // Vue 3: 直接赋值即可（Proxy 自动处理响应式）
+          this.registeredPanels[panelKey].visible = false;
+          console.log(`[CesiumMain] ✅ 单实例面板已隐藏: ${panelKey}`);
+        }
+      });
     },
 
     // ==================== 工具条按钮处理方法 ====================

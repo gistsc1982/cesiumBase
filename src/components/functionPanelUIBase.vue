@@ -569,10 +569,11 @@ export default {
           this.setPanelVisible(this.registrationKey, false);
           console.log(`[FunctionPanelUIBase] ✅ 已设置面板 ${this.registrationKey} 可见性为 false`);
         } else if (this.getRegisteredPanels && typeof this.getRegisteredPanels === 'function') {
-          // 回退方案：直接获取 registeredPanels 并更新（使用 $set 确保响应式）
+          // 回退方案：直接获取 registeredPanels 并更新
           const panels = this.getRegisteredPanels();
           if (panels && panels[this.registrationKey]) {
-            this.$set(panels[this.registrationKey], 'visible', false);
+            // Vue 3: 直接赋值即可（Proxy 自动处理响应式）
+            panels[this.registrationKey].visible = false;
             console.log(`[FunctionPanelUIBase] ✅ 已设置面板 ${this.registrationKey} 可见性为 false（直接修改）`);
           }
         }
