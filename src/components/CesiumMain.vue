@@ -610,6 +610,13 @@ export default {
 
       // 1. 从 PanelSingletonManager 获取单例面板（已注册且可见的）
       const singletonPanels = panelSingletonManager.getAllPanels();
+      console.log(`[CesiumMain #${instanceId}] 🎯 单例面板管理器中的所有面板:`, singletonPanels.map(p => ({
+        name: p.name,
+        visible: p.visible,
+        hasComponent: !!p.component,
+        componentType: typeof p.component
+      })));
+
       for (const panel of singletonPanels) {
         if (panel.visible && panel.component) {
           // 如果有组件引用，直接使用
@@ -618,12 +625,20 @@ export default {
             component: panel.component,
             props: panel.props || {}
           });
+          console.log(`[CesiumMain #${instanceId}] ✅ 面板 ${panel.name} 将显示（有组件）`);
         } else if (panel.visible && this.functionPanelComponents[panel.name]) {
           // 如果管理器中没有组件引用，从本地缓存中获取
           panels.push({
             key: panel.name,
             component: this.functionPanelComponents[panel.name],
             props: panel.props || {}
+          });
+          console.log(`[CesiumMain #${instanceId}] ✅ 面板 ${panel.name} 将显示（从缓存获取）`);
+        } else {
+          console.log(`[CesiumMain #${instanceId}] ⏭️ 面板 ${panel.name} 跳过显示:`, {
+            visible: panel.visible,
+            hasComponent: !!panel.component,
+            hasCachedComponent: !!this.functionPanelComponents[panel.name]
           });
         }
       }
@@ -640,6 +655,7 @@ export default {
         });
       }
 
+      console.log(`[CesiumMain #${instanceId}] 📋 最终可见面板列表 (${panels.length} 个):`, panels.map(p => p.key));
       return panels;
     },
     Cesium() {
@@ -972,8 +988,11 @@ export default {
 
       // ⭐ 单例模式：检查面板是否已注册
       if (this.registeredPanels[panelId]) {
-        // 已注册：更新可见性
-        this.$set(this.registeredPanels[panelId], 'visible', visible);
+        // 已注册：更新可见性（通过 panelSingletonManager）
+        panelSingletonManager.updatePanelVisible(panelId, visible);
+        this.registeredPanels[panelId].visible = visible;
+        // 触发计算属性重新计算
+        this._panelsRefreshCounter++;
         console.log(`[CesiumMain] 🔄 ${panelId} 可见性: ${visible ? '显示' : '隐藏'}`);
       } else if (visible) {
         // 未注册且需要显示：动态加载组件
@@ -8077,6 +8096,13 @@ async loadTestSfcComponent(instanceId) {
               // ⭐ 从多实例配置管理器获取实例特定的配置
               const instancePanelConfig = multiInstancePanelConfigManager.getPanelConfig(instanceId, name);
 
+              console.log(`[CesiumMain #${instanceId}] 🔍 调试面板 ${name}:`, {
+                hasConfig: !!instancePanelConfig,
+                config: instancePanelConfig,
+                visible: instancePanelConfig?.visible,
+                position: instancePanelConfig?.position
+              });
+
               if (instancePanelConfig) {
                 const isVisible = instancePanelConfig.visible;
                 const panelProps = {
@@ -8089,6 +8115,8 @@ async loadTestSfcComponent(instanceId) {
                   props: panelProps,
                   visible: isVisible
                 });
+              } else {
+                console.warn(`[CesiumMain #${instanceId}] ⚠️ 面板 ${name} 的配置不存在，跳过注册`);
               }
             }).catch((error) => {
               this.loadingComponents[name] = false;
