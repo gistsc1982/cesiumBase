@@ -24,7 +24,6 @@
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
-const DatabaseManager = require('./sqlite-db-manager');
 
 // ==================== 配置 ====================
 
@@ -43,8 +42,12 @@ const CONFIG = {
     origin: '*',
     methods: ['GET', 'POST', 'OPTIONS'],
     allowedHeaders: ['Content-Type']
-  }
+  },
+
+  // 目录浏览配置
+  DIRECTORY_BROWSING: true // 启用目录浏览
 };
+const DatabaseManager = require('./sqlite-db-manager');
 
 // ==================== Express 应用 ====================
 
@@ -56,8 +59,27 @@ app.use(cors(CONFIG.CORS));
 // JSON 解析
 app.use(express.json({ limit: '10mb' }));
 
-// 静态文件服务
-app.use('/data', express.static(CONFIG.DATA_DIR));
+// 静态文件服务（启用目录浏览）
+const serveIndex = require('serve-index');
+const serveStatic = express.static(CONFIG.DATA_DIR, {
+  index: false, // 不自动寻找 index.html
+  setHeaders: (res, path) => {
+    // 设置 JSON 文件的 Content-Type
+    if (path.endsWith('.json')) {
+      res.setHeader('Content-Type', 'application/json; charset=utf-8');
+    }
+  }
+});
+
+app.use('/data', serveStatic);
+app.use('/data', serveIndex(CONFIG.DATA_DIR, {
+  icons: true,
+  view: 'listing',
+  filter: (filename, index) => {
+    // 可以在这里添加过滤规则
+    return true; // 显示所有文件
+  }
+}));
 
 // ==================== 数据库管理器 ====================
 

@@ -75,6 +75,10 @@ module.exports = {
       和具名插件，可以通过其提供的一些方法链式调用，在cli-service中就使用了这个插件
     */
     configureWebpack: {
+        // ⭐ 忽略特定目录的文件变化，防止自动重启
+        watchOptions: {
+            ignored: '**/data/**'
+        },
         output: {
             sourcePrefix: ' ' // 1 让webpack 正确处理多行字符串配置 amd参数
         },
@@ -201,6 +205,12 @@ module.exports = {
     },
 
     chainWebpack: config => {
+        // ⭐ 配置文件监听忽略规则（防止 API 服务器导致的自动重启）
+        config.watchOptions({
+            ignored: ['**/data/**', '**/node_modules/**', '**/.git/**'],
+            aggregateTimeout: 300
+        });
+
         // ⭐ 配置 @vue/compat 使用完整版本（包含编译器）
         // 通过设置 mainFields 确保使用正确的导出
         config.resolve.mainFields.clear().add('browser').add('module').add('import').add('main');
