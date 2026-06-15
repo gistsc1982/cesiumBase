@@ -27,9 +27,6 @@ export default {
     }
   },
   inject: {
-    closeEventName: {
-      default: 'sfcBaseClose'
-    },
     instanceId: {
       default: 1
     }

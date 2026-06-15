@@ -24,7 +24,7 @@
       "title": "倾斜摄影面板",
       "description": "倾斜摄影模型加载和管理面板（单例模式）",
       "enabled": true,
-      "visible": false,
+      "visible": true,
       "icon": "📷",
       "category": "tools",
       "permissions": [],

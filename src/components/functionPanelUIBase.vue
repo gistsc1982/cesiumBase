@@ -88,7 +88,6 @@ export default {
   name: 'FunctionPanelUIBase',
   mixins: [SfcBase],
   inject: {
-    // ⭐ 覆盖 SfcBase 的 inject，避免 closeEventName 与 props 冲突
     // 父组件提供的注册方法（可选）
     registerPanelComponent: {
       type: Function,
@@ -113,10 +112,6 @@ export default {
       type: Function,
       default: () => 1
     },
-    // ⭐ 覆盖 SfcBase 的 instanceId inject，避免与 computed 冲突
-    instanceId: {
-      default: 1
-    },
     // ==================== 多实例面板管理 ====================
     // ⭐ 多实例面板管理器（可选）
     multiInstanceManager: {
@@ -138,7 +133,6 @@ export default {
       type: Function,
       default: null
     }
-    // ⚠️ 注意：不包含 closeEventName，因为在 props 中已定义
   },
   props: {
     // 自注册配置
@@ -207,8 +201,8 @@ export default {
     }
   },
   mounted() {
-    // 自注册逻辑
-    if (this.autoRegister && this.registrationKey) {
+    // 自注册逻辑 - 检查是否已注册，避免重复注册
+    if (this.autoRegister && this.registrationKey && !this._registryRegistered) {
       this.registerToParent();
     }
 
@@ -274,8 +268,33 @@ export default {
         return;
       }
 
-      // 方式1: 通过 inject 的注册方法（优先）
-      if (this.registerPanelComponent && typeof this.registerPanelComponent === 'function') {
+      // ⭐ 判断是单例面板还是多实例面板
+      // 复用现有逻辑：panelInstanceId !== null 表示多实例面板
+      const isMultiInstance = this.panelInstanceId !== null;
+
+      // ⭐ 多实例面板：使用 inject 提供的 registerPanelInstance 方法
+      if (isMultiInstance && this.registerPanelInstance && typeof this.registerPanelInstance === 'function') {
+        const instanceConfig = this.getInstanceConfig();
+
+        // 合并props：实例配置优先，然后是组件自身的props
+        const mergedProps = {
+          ...this.$props,
+          ...(instanceConfig?.position || {})
+        };
+
+        this.registerPanelInstance(this.registrationKey, {
+          component: this, // 多实例面板需要传递组件实例
+          props: mergedProps,
+          visible: true
+        }, this.panelInstanceId);
+
+        this._registryRegistered = true;
+        console.log(`[FunctionPanelUIBase #${this.instanceId}] ${this.registrationKey} 多实例注册完成`);
+        return;
+      }
+
+      // ⭐ 单例面板：使用 inject 提供的 registerPanelComponent 方法
+      if (!isMultiInstance && this.registerPanelComponent && typeof this.registerPanelComponent === 'function') {
         // ⭐ 获取实例特定的配置
         const instanceConfig = this.getInstanceConfig();
 
@@ -288,24 +307,30 @@ export default {
         // 使用实例配置的可见性，如果没有则默认为true
         const visible = instanceConfig ? instanceConfig.visible : true;
 
+        // ⭐ 单例面板：不传递组件实例（组件已在预加载时加载）
         this.registerPanelComponent(this.registrationKey, {
-          component: this,
           props: mergedProps,
           visible: visible
         });
         this._registryRegistered = true;
-        console.log(`[FunctionPanelUIBase #${this.instanceId}] ${this.registrationKey} 已注册, visible: ${visible}, position:`, mergedProps);
+        console.log(`[FunctionPanelUIBase #${this.instanceId}] ${this.registrationKey} 单例注册完成, visible: ${visible}`);
         return;
       }
 
       // 方式2: 触发自定义事件，通知父组件
-      this.$emit('register-panel', {
+      const eventData = {
         key: this.registrationKey,
-        component: this,
         props: this.$props
-      });
+      };
+
+      if (isMultiInstance) {
+        // 多实例面板需要传递组件实例
+        eventData.component = this;
+      }
+
+      this.$emit('register-panel', eventData);
       this._registryRegistered = true;
-      console.log(`[FunctionPanelUIBase #${this.instanceId}] ${this.registrationKey} 已通过事件注册`);
+      console.log(`[FunctionPanelUIBase #${this.instanceId}] ${this.registrationKey} 已通过事件${isMultiInstance ? '（多实例）' : ''}注册`);
     },
 
     /**

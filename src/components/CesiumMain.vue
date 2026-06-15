@@ -618,20 +618,37 @@ export default {
       })));
 
       for (const panel of singletonPanels) {
-        if (panel.visible && panel.component) {
+        console.log(`[CesiumMain #${instanceId}] 🔍 检查面板 ${panel.name}:`, {
+          visible: panel.visible,
+          hasComponent: !!panel.component,
+          isClosed: panel.isClosed,
+          componentType: typeof panel.component
+        });
+
+        if (panel.visible && panel.component && !panel.isClosed) {
           // 如果有组件引用，直接使用
+          // ⭐ 只传递位置相关的 props，其他 props 组件已自己定义
+          const { initialX, initialY } = panel.props || {};
+          const renderProps = initialX !== undefined || initialY !== undefined
+            ? { initialX, initialY }
+            : undefined;
           panels.push({
             key: panel.name,
             component: panel.component,
-            props: panel.props || {}
+            props: renderProps
           });
           console.log(`[CesiumMain #${instanceId}] ✅ 面板 ${panel.name} 将显示（有组件）`);
         } else if (panel.visible && this.functionPanelComponents[panel.name]) {
           // 如果管理器中没有组件引用，从本地缓存中获取
+          // ⭐ 只传递位置相关的 props，其他 props 组件已自己定义
+          const { initialX, initialY } = panel.props || {};
+          const renderProps = initialX !== undefined || initialY !== undefined
+            ? { initialX, initialY }
+            : undefined;
           panels.push({
             key: panel.name,
             component: this.functionPanelComponents[panel.name],
-            props: panel.props || {}
+            props: renderProps
           });
           console.log(`[CesiumMain #${instanceId}] ✅ 面板 ${panel.name} 将显示（从缓存获取）`);
         } else {
@@ -701,6 +718,66 @@ export default {
     },
 
     // ==================== 功能面板自动加载 ====================
+
+    /**
+     * 预加载并预注册启用的面板组件
+     * 在 Cesium 初始化完成后调用，避免组件初始化超时
+     */
+    async preloadEnabledPanels() {
+      const instanceId = this.instanceId || 1;
+      try {
+        const enabledNames = getEnabledPanelNames();
+        console.log(`[CesiumMain #${instanceId}] 📦 检测到 ${enabledNames.length} 个启用的面板组件`);
+
+        // 获取完整的面板配置
+        const panelConfigs = getAvailablePanelConfigs();
+
+        // 预加载所有启用的面板
+        for (const name of enabledNames) {
+          if (!this.functionPanelComponents[name] && !this.loadingComponents[name]) {
+            console.log(`[CesiumMain #${instanceId}] 📋 预加载面板组件: ${name}`);
+            // 标记为加载中
+            this.loadingComponents[name] = true;
+            // 异步加载（不阻塞）
+            this.loadFunctionPanel(name).then((component) => {
+              this.loadingComponents[name] = false;
+
+              // ⭐ 从多实例配置管理器获取实例特定的配置
+              const instancePanelConfig = multiInstancePanelConfigManager.getPanelConfig(instanceId, name);
+
+              console.log(`[CesiumMain #${instanceId}] 🔍 调试面板 ${name}:`, {
+                hasConfig: !!instancePanelConfig,
+                config: instancePanelConfig,
+                visible: instancePanelConfig?.visible,
+                position: instancePanelConfig?.position
+              });
+
+              if (instancePanelConfig) {
+                const isVisible = instancePanelConfig.visible;
+                const panelProps = {
+                  // 位置配置
+                  ...instancePanelConfig.position
+                };
+                console.log(`[CesiumMain #${instanceId}] 📋 预注册面板: ${name}, visible: ${isVisible}, props:`, panelProps);
+
+                this.registerPanelComponent(name, {
+                  component,
+                  props: panelProps,
+                  visible: isVisible
+                });
+              } else {
+                console.warn(`[CesiumMain #${instanceId}] ⚠️ 面板 ${name} 的配置不存在，跳过注册`);
+              }
+            }).catch((error) => {
+              this.loadingComponents[name] = false;
+              console.error(`[CesiumMain #${instanceId}] ❌ 加载面板组件失败: ${name}`, error);
+            });
+          }
+        }
+      } catch (error) {
+        console.error(`[CesiumMain #${instanceId}] ❌ 预加载面板组件失败:`, error);
+      }
+    },
 
     /**
      * 动态加载指定的功能面板组件
@@ -803,38 +880,22 @@ export default {
       // ⭐ 防止重复注册：检查面板是否已经在 PanelSingletonManager 中注册
       const existingPanel = panelSingletonManager.getPanel(key);
       if (existingPanel) {
-        // 如果面板已存在且配置未变化，跳过注册避免循环更新
+        // 如果面板已存在且配置完全一致，跳过注册避免循环更新
         if (existingPanel.component === config.component &&
-            existingPanel.visible === config.visible) {
+            existingPanel.visible === config.visible &&
+            JSON.stringify(existingPanel.props) === JSON.stringify(config.props)) {
           console.log(`[CesiumMain #${instanceId}] ⏭️ 面板 ${key} 已存在，跳过重复注册`);
           return;
+        }
+        // 如果配置有变化，只更新需要更新的字段
+        console.log(`[CesiumMain #${instanceId}] 🔄 面板 ${key} 配置已变化，更新配置`);
+        if (existingPanel.visible !== config.visible) {
+          panelSingletonManager.updatePanelVisible(key, config.visible);
         }
       }
 
       // ⭐ 使用 $nextTick 延迟注册，避免在渲染过程中修改响应式数据导致无限循环
       this.$nextTick(() => {
-        // ⭐ ObliquePhotographyPanel 单实例模式检查
-        if (key === 'ObliquePhotographyPanel' && panelSingletonManager.hasPanel(key)) {
-          console.log(`[CesiumMain #${instanceId}] ⭐ ObliquePhotographyPanel 已存在，使用单实例模式（仅显示面板）`);
-
-          // ⚡ 清理旧的组件实例引用（已被销毁）
-          const currentPanel = panelSingletonManager.getPanel(key);
-          const oldComponent = currentPanel?.component;
-          if (oldComponent && oldComponent !== config.component) {
-            console.log(`[CesiumMain #${instanceId}] 🔄 清理旧的 ObliquePhotographyPanel 实例引用`);
-          }
-
-          // ⭐ 同步更新到 PanelSingletonManager
-          panelSingletonManager.registerPanel(key, {
-            component: markRaw(config.component),
-            props: currentPanel?.props || config.props || {},
-            visible: true
-          });
-
-          console.log(`[CesiumMain #${instanceId}] ✅ ObliquePhotographyPanel 已显示（保留已加载的倾斜摄影数据）`);
-          return;
-        }
-
         // ⭐ 从多实例配置管理器获取实例特定的配置
         const instancePanelConfig = multiInstancePanelConfigManager.getPanelConfig(instanceId, key);
 
@@ -846,19 +907,30 @@ export default {
 
         const mergedVisible = instancePanelConfig ? instancePanelConfig.visible : (config.visible !== false);
 
+        // ⭐ 获取组件定义（如果 config.component 不存在，从缓存中获取）
+        const component = config.component || this.functionPanelComponents[key];
+
+        if (!component) {
+          console.warn(`[CesiumMain #${instanceId}] ⚠️ 面板 ${key} 的组件未找到`);
+          return;
+        }
+
         // ⭐ 注册到 PanelSingletonManager（统一管理单例面板）
         panelSingletonManager.registerPanel(key, {
-          component: markRaw(config.component), // 使用 markRaw 避免响应式包装
+          component: markRaw(component), // 使用 markRaw 避免响应式包装
           props: mergedProps,
           visible: mergedVisible
         });
 
         // ⭐ 同时缓存到本地（用于兼容性）
         this.registeredPanels[key] = {
-          component: markRaw(config.component),
+          component: markRaw(component),
           props: mergedProps,
           visible: mergedVisible
         };
+
+        // ⭐ 触发计算属性重新计算
+        this._panelsRefreshCounter++;
 
         console.log(`[CesiumMain #${instanceId}] ✅ 面板 ${key} 已注册（使用实例配置）:`, {
           visible: mergedVisible,
@@ -987,8 +1059,31 @@ export default {
       }
 
       // ⭐ 单例模式：检查面板是否已注册
+      console.log(`[CesiumMain] 🔍 检查面板注册状态: ${panelId}`, {
+        registeredPanels: !!this.registeredPanels[panelId],
+        panelSingletonManager: panelSingletonManager.hasPanel(panelId),
+        functionPanelComponents: !!this.functionPanelComponents[panelId]
+      });
+
+      // ⭐ 优先检查 panelSingletonManager（单例面板的真实状态）
+      if (panelSingletonManager.hasPanel(panelId)) {
+        // 已在管理器中注册：更新可见性
+        console.log(`[CesiumMain] 🔄 面板已在管理器中，更新可见性: ${panelId} = ${visible}`);
+        panelSingletonManager.updatePanelVisible(panelId, visible);
+        // 同步到本地缓存
+        if (this.registeredPanels[panelId]) {
+          this.registeredPanels[panelId].visible = visible;
+        }
+        // 触发计算属性重新计算
+        this._panelsRefreshCounter++;
+        console.log(`[CesiumMain] 🔄 ${panelId} 可见性: ${visible ? '显示' : '隐藏'}`);
+        return;
+      }
+
+      // 检查本地缓存
       if (this.registeredPanels[panelId]) {
         // 已注册：更新可见性（通过 panelSingletonManager）
+        console.log(`[CesiumMain] 🔄 面板已注册（本地缓存），更新可见性: ${panelId} = ${visible}`);
         panelSingletonManager.updatePanelVisible(panelId, visible);
         this.registeredPanels[panelId].visible = visible;
         // 触发计算属性重新计算
@@ -998,8 +1093,13 @@ export default {
         // 未注册且需要显示：动态加载组件
         console.log(`[CesiumMain] 📦 首次加载面板组件: ${panelId}`);
         this.loadFunctionPanel(panelId)
-          .then(() => {
-            console.log(`[CesiumMain] ✅ ${panelId} 组件加载完成`);
+          .then((component) => {
+            console.log(`[CesiumMain] ✅ ${panelId} 组件加载完成，开始注册...`);
+            // 组件加载后，需要触发自注册
+            // 由于面板已经渲染，组件的 mounted 钩子会自动注册
+            this.$nextTick(() => {
+              console.log(`[CesiumMain] 🎯 ${panelId} 自注册应该已完成`);
+            });
           })
           .catch((error) => {
             console.error(`[CesiumMain] ❌ ${panelId} 组件加载失败:`, error);
@@ -8073,61 +8173,17 @@ async loadTestSfcComponent(instanceId) {
     // 缓存 instanceId 避免重复访问
     const instanceId = this.instanceId || 1;
 
-    // ⭐ 预加载并预注册启用的面板组件（提升首次打开速度）
-    // 根据配置文件中的 visible 字段决定是否默认显示
-    this.$nextTick(async () => {
-      try {
-        const enabledNames = getEnabledPanelNames();
-        console.log(`[CesiumMain #${instanceId}] 📦 检测到 ${enabledNames.length} 个启用的面板组件`);
+    // ⭐ 预加载面板将在 Cesium 初始化完成后执行
+    // 避免面板组件在 Cesium 未就绪时初始化超时
+    console.log(`[CesiumMain #${instanceId}] ⏸️ 面板预加载已安排，等待 Cesium 初始化完成...`);
 
-        // 获取完整的面板配置
-        const panelConfigs = getAvailablePanelConfigs();
-
-        // 预加载所有启用的面板（可选）
-        for (const name of enabledNames) {
-          if (!this.functionPanelComponents[name] && !this.loadingComponents[name]) {
-            console.log(`[CesiumMain #${instanceId}] 📋 预加载面板组件: ${name}`);
-            // 标记为加载中
-            this.loadingComponents[name] = true;
-            // 异步加载（不阻塞）
-            this.loadFunctionPanel(name).then((component) => {
-              this.loadingComponents[name] = false;
-
-              // ⭐ 从多实例配置管理器获取实例特定的配置
-              const instancePanelConfig = multiInstancePanelConfigManager.getPanelConfig(instanceId, name);
-
-              console.log(`[CesiumMain #${instanceId}] 🔍 调试面板 ${name}:`, {
-                hasConfig: !!instancePanelConfig,
-                config: instancePanelConfig,
-                visible: instancePanelConfig?.visible,
-                position: instancePanelConfig?.position
-              });
-
-              if (instancePanelConfig) {
-                const isVisible = instancePanelConfig.visible;
-                const panelProps = {
-                  ...instancePanelConfig.position  // 使用实例特定的位置配置
-                };
-                console.log(`[CesiumMain #${instanceId}] 📋 预注册面板: ${name}, visible: ${isVisible}, position:`, panelProps);
-
-                this.registerPanelComponent(name, {
-                  component,
-                  props: panelProps,
-                  visible: isVisible
-                });
-              } else {
-                console.warn(`[CesiumMain #${instanceId}] ⚠️ 面板 ${name} 的配置不存在，跳过注册`);
-              }
-            }).catch((error) => {
-              this.loadingComponents[name] = false;
-              console.error(`[CesiumMain #${instanceId}] ❌ 加载面板组件失败: ${name}`, error);
-            });
-          }
-        }
-      } catch (error) {
-        console.error(`[CesiumMain #${instanceId}] ❌ 预加载面板组件失败:`, error);
-      }
-    });
+    // ⭐ 监听 Cesium 初始化完成事件
+    const handleCesiumReady = () => {
+      console.log(`[CesiumMain #${instanceId}] ✅ Cesium 已就绪，开始预加载面板...`);
+      this.preloadEnabledPanels();
+      window.removeEventListener('cesium-viewer-ready', handleCesiumReady);
+    };
+    window.addEventListener('cesium-viewer-ready', handleCesiumReady);
 
     // 暴露实例到全局，用于调试和脚本 hook
     if (typeof window !== 'undefined') {
