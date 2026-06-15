@@ -64,8 +64,9 @@
 
     <!-- ⭐ Cesium 工具条 -->
     <CesiumToolbar
-      :buttons="toolbarButtons"
+      ref="toolbar"
       @button-click="handleToolbarButtonClick"
+      @panel-toggle="handleToolPanelToggle"
     />
 
     <!-- ⭐ 动态渲染自注册的功能面板 -->
@@ -570,58 +571,6 @@ export default {
     },
     Cesium() {
       return this.cesium;
-    },
-    /**
-     * 动态更新工具条按钮的 active 状态
-     */
-    toolbarButtons() {
-      return [
-        {
-          id: 'multi-instance',
-          icon: '🖥️',
-          label: '多实例',
-          tooltip: '创建 DualCanvasViewer 实例',
-          active: false,
-          disabled: false,
-          ariaLabel: '多实例'
-        },
-        {
-          id: 'oblique-photo',
-          icon: '📷',
-          label: '倾斜摄影',
-          tooltip: '倾斜摄影面板（单例模式测试）',
-          active: this.registeredPanels.ObliquePhotographyPanel?.visible || false,
-          disabled: false,
-          ariaLabel: '倾斜摄影面板'
-        },
-        {
-          id: 'testsfc-modal',
-          icon: '🧪',
-          label: 'TestSfc',
-          tooltip: 'TestSfc 经纬度定位组件',
-          active: this.testSfcModalVisible,
-          disabled: false,
-          ariaLabel: 'TestSfc测试'
-        },
-        {
-          id: 'sfc-test',
-          icon: '🌐',
-          label: 'SFC',
-          tooltip: 'SfcDualCanvasViewer 双画布组件',
-          active: this.testSfcVisible,
-          disabled: false,
-          ariaLabel: 'SFC测试'
-        },
-        {
-          id: 'loading-mode',
-          icon: this.useIIFELoading ? 'IIFE' : 'SFC',
-          label: '模式',
-          tooltip: this.useIIFELoading ? 'IIFE模式' : 'SFC模式',
-          active: false,
-          disabled: false,
-          ariaLabel: '加载模式'
-        }
-      ];
     }
   },
   provide: {
@@ -891,9 +840,6 @@ export default {
         case 'multi-instance':
           this.createDualCanvasInstance();
           break;
-        case 'oblique-photo':
-          this.toggleObliquePhotographyPanel();
-          break;
         case 'testsfc-modal':
           this.toggleTestSfcModal();
           break;
@@ -909,29 +855,32 @@ export default {
     },
 
     /**
-     * 切换倾斜摄影面板显示状态（单例模式测试）
+     * 处理工具栏面板切换事件（由 CesiumToolbar 发出）
+     * @param {Object} event - 面板切换事件
+     * @param {string} event.panelId - 面板ID
+     * @param {boolean} event.visible - 目标可见性
+     * @param {boolean} event.singleton - 是否单例模式
+     * @param {string} event.action - 操作类型（'toggle' | 'load'）
      */
-    toggleObliquePhotographyPanel() {
-      const panelKey = 'ObliquePhotographyPanel';
-
-      console.log(`[CesiumMain] 📷 切换倾斜摄影面板: ${panelKey}`);
+    handleToolPanelToggle(event) {
+      const { panelId, visible, singleton, action } = event;
+      console.log(`[CesiumMain] 🔧 工具栏面板切换: ${panelId}, 可见性: ${visible}, 单例: ${singleton}`);
 
       // 检查面板是否已注册
-      if (this.registeredPanels[panelKey]) {
-        // 已注册：切换可见性
-        const currentVisible = this.registeredPanels[panelKey].visible;
-        this.registeredPanels[panelKey].visible = !currentVisible;
-
-        console.log(`[CesiumMain] 🔄 倾斜摄影面板可见性: ${!currentVisible ? '显示' : '隐藏'}（单例模式）`);
+      if (this.registeredPanels[panelId]) {
+        // 已注册：更新可见性
+        this.registeredPanels[panelId].visible = visible;
+        console.log(`[CesiumMain] 🔄 ${panelId} 可见性: ${visible ? '显示' : '隐藏'}`);
       } else {
         // 未注册：动态加载组件
-        console.log(`[CesiumMain] 📦 首次加载倾斜摄影面板组件`);
-
-        this.loadFunctionPanel(panelKey).then(() => {
-          console.log(`[CesiumMain] ✅ 倾斜摄影面板组件加载完成`);
-        }).catch((error) => {
-          console.error(`[CesiumMain] ❌ 倾斜摄影面板组件加载失败:`, error);
-        });
+        console.log(`[CesiumMain] 📦 首次加载面板组件: ${panelId}`);
+        this.loadFunctionPanel(panelId)
+          .then(() => {
+            console.log(`[CesiumMain] ✅ ${panelId} 组件加载完成`);
+          })
+          .catch((error) => {
+            console.error(`[CesiumMain] ❌ ${panelId} 组件加载失败:`, error);
+          });
       }
     },
 

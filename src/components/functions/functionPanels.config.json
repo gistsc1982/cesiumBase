@@ -32,6 +32,21 @@
         "initialX": "center",
         "initialY": 120
       }
+    },
+    {
+      "name": "ObliquePhotographyPanelExample",
+      "file": "ObliquePhotographyPanelExample.vue",
+      "title": "测试面板",
+      "description": "测试 JsonConfigPanelBase（继承示例）",
+      "enabled": true,
+      "visible": false,
+      "icon": "🧪",
+      "category": "test",
+      "permissions": [],
+      "position": {
+        "initialX": "left",
+        "initialY": 150
+      }
     }
   ],
   "categories": {

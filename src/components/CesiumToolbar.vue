@@ -11,7 +11,7 @@
     <!-- 按钮组 -->
     <div class="toolbar-buttons" role="group" aria-label="工具按钮">
       <CesiumToolbarButton
-        v-for="button in buttons"
+        v-for="button in managedButtons"
         :key="button.id"
         :icon="button.icon"
         :label="button.label"
@@ -43,11 +43,11 @@
 import CesiumToolbarButton from './CesiumToolbarButton.vue'
 
 /**
- * CesiumToolbar - Cesium 工具条组件
+ * CesiumToolbar - Cesium 自包含工具条组件
  *
  * @description
  * 专为 Cesium 应用设计的现代化工具条，采用 Glassmorphism 设计风格。
- * 高 z-index 确保工具条始终位于所有内容之上，包括多实例容器。
+ * 自己管理工具栏按钮和面板状态，无需外部传入按钮配置。
  *
  * @features
  * - Glassmorphism 视觉效果（毛玻璃、模糊背景）
@@ -55,12 +55,18 @@ import CesiumToolbarButton from './CesiumToolbarButton.vue'
  * - 响应式设计，支持移动端和桌面端
  * - 完整的可访问性支持
  * - 支持折叠/展开（可选）
+ * - 自动管理面板注册和状态
  *
  * @design-system
  * - Pattern: Real-Time Monitoring
  * - Style: Glassmorphism
  * - Colors: Primary #1E293B, CTA #22C55E, Background #0F172A
  * - Typography: Fira Code
+ *
+ * @panel-management
+ * - 支持面板注册：自动发现和注册功能面板
+ * - 支持面板状态同步：自动更新按钮 active 状态
+ * - 支持单例模式：特殊面板只允许一个实例
  *
  * @accessibility
  * - 所有按钮都有 aria-label
@@ -74,7 +80,7 @@ import CesiumToolbarButton from './CesiumToolbarButton.vue'
  * - 单实例容器: 99995
  *
  * @example
- * <CesiumToolbar :buttons="toolbarButtons" @button-click="handleButtonClick" />
+ * <CesiumToolbar @panel-toggle="handlePanelToggle" />
  */
 export default {
   name: 'CesiumToolbar',
@@ -84,16 +90,6 @@ export default {
   },
 
   props: {
-    /**
-     * 按钮配置数组
-     * @type {Array<{id: string, icon: string, label: string, tooltip: string, active?: boolean, disabled?: boolean, ariaLabel?: string}>}
-     * @default []
-     */
-    buttons: {
-      type: Array,
-      default: () => []
-    },
-
     /**
      * 工具条标签（用于可访问性）
      * @type {string}
@@ -122,18 +118,120 @@ export default {
     initiallyCollapsed: {
       type: Boolean,
       default: false
+    },
+
+    /**
+     * 可选的自定义按钮（用于扩展默认按钮列表）
+     * @type {Array<Object>}
+     * @default []
+     */
+    customButtons: {
+      type: Array,
+      default: () => []
     }
   },
 
-  emits: ['button-click', 'toggle-collapse'],
+  emits: [
+    'button-click',           // 按钮被点击
+    'panel-toggle',          // 面板切换请求
+    'panel-registered',       // 新面板注册
+    'panel-unregistered'      // 面板注销
+  ],
 
   data() {
     return {
-      isCollapsed: this.initiallyCollapsed
-    }
+      isCollapsed: this.initiallyCollapsed,
+
+      // ==================== 面板注册表 ====================
+      // 存储已注册的面板信息
+      // Map<panelId, { component, props, visible, singleton, instance }>
+      registeredPanels: new Map(),
+
+      // ==================== 默认工具栏按钮 ====================
+      defaultButtons: [
+        {
+          id: 'multi-instance',
+          icon: '🖥️',
+          label: '多实例',
+          tooltip: '创建 DualCanvasViewer 实例',
+          disabled: false,
+          ariaLabel: '多实例',
+          action: 'multi-instance'
+        },
+        {
+          id: 'oblique-photo',
+          icon: '📷',
+          label: '倾斜摄影',
+          tooltip: '倾斜摄影面板（单例模式）',
+          disabled: false,
+          ariaLabel: '倾斜摄影面板',
+          action: 'toggle-panel',
+          panelId: 'ObliquePhotographyPanel',
+          singleton: true
+        },
+        {
+          id: 'oblique-photo-example',
+          icon: '🧪',
+          label: '测试面板',
+          tooltip: '测试 JsonConfigPanelBase（继承示例）',
+          disabled: false,
+          ariaLabel: '测试面板',
+          action: 'toggle-panel',
+          panelId: 'ObliquePhotographyPanelExample',
+          singleton: true
+        },
+        {
+          id: 'testsfc-modal',
+          icon: '🧪',
+          label: 'TestSfc',
+          tooltip: 'TestSfc 经纬度定位组件',
+          disabled: false,
+          ariaLabel: 'TestSfc测试',
+          action: 'modal-toggle',
+          modalId: 'testSfc'
+        },
+        {
+          id: 'sfc-test',
+          icon: '🌐',
+          label: 'SFC',
+          tooltip: 'SfcDualCanvasViewer 双画布组件',
+          disabled: false,
+          ariaLabel: 'SFC测试',
+          action: 'sfc-toggle'
+        },
+        {
+          id: 'loading-mode',
+          icon: 'IIFE',
+          label: '模式',
+          tooltip: '切换加载模式',
+          disabled: false,
+          ariaLabel: '加载模式',
+          action: 'loading-mode-toggle'
+        }
+      ]
+    };
   },
 
   computed: {
+    /**
+     * 合并默认按钮和自定义按钮
+     */
+    managedButtons() {
+      const buttons = [...this.defaultButtons, ...this.customButtons];
+
+      // 自动更新面板按钮的 active 状态
+      return buttons.map(button => {
+        if (button.action === 'toggle-panel' && button.panelId) {
+          const panel = this.registeredPanels.get(button.panelId);
+          return {
+            ...button,
+            active: panel?.visible || false
+          };
+        }
+        return button;
+      });
+    },
+
     /**
      * 工具条容器的 CSS 类
      */
@@ -143,7 +241,20 @@ export default {
         {
           'cesium-toolbar--collapsed': this.isCollapsed
         }
-      ]
+      ];
+    },
+
+    /**
+     * 获取所有可见面板
+     */
+    visiblePanels() {
+      const panels = [];
+      this.registeredPanels.forEach((panel, panelId) => {
+        if (panel.visible) {
+          panels.push({ key: panelId, ...panel });
+        }
+      });
+      return panels;
     }
   },
 
@@ -153,25 +264,144 @@ export default {
      * @param {Object} button - 按钮配置
      */
     handleButtonClick(button) {
-      if (button.disabled) return
+      if (button.disabled) return;
 
-      this.$emit('button-click', button)
+      console.log(`[CesiumToolbar] 按钮被点击: ${button.id}`);
+
+      switch (button.action) {
+        case 'toggle-panel':
+          this.handlePanelToggle(button);
+          break;
+        case 'modal-toggle':
+          this.$emit('button-click', button);
+          break;
+        default:
+          // 其他按钮直接转发事件
+          this.$emit('button-click', button);
+      }
+    },
+
+    /**
+     * 处理面板切换
+     * @param {Object} button - 按钮配置
+     */
+    handlePanelToggle(button) {
+      const panelId = button.panelId;
+      const panel = this.registeredPanels.get(panelId);
+
+      if (panel) {
+        // 面板已注册：切换可见性
+        const newVisible = !panel.visible;
+
+        // 单例模式：如果面板已加载，不销毁组件，只隐藏/显示
+        if (button.singleton) {
+          panel.visible = newVisible;
+          this.registeredPanels.set(panelId, panel);
+
+          console.log(`[CesiumToolbar] 🔄 ${panelId} 可见性: ${newVisible ? '显示' : '隐藏'}（单例模式）`);
+
+          this.$emit('panel-toggle', {
+            panelId,
+            visible: newVisible,
+            singleton: true
+          });
+        } else {
+          // 多实例模式：完全销毁/创建
+          this.$emit('panel-toggle', {
+            panelId,
+            visible: newVisible,
+            singleton: false
+          });
+        }
+      } else {
+        // 面板未注册：请求加载面板
+        console.log(`[CesiumToolbar] 📦 首次加载面板: ${panelId}`);
+
+        this.$emit('panel-toggle', {
+          panelId,
+          visible: true,
+          singleton: button.singleton || false,
+          action: 'load'
+        });
+      }
+    },
+
+    /**
+     * 注册面板
+     * @param {string} panelId - 面板唯一标识
+     * @param {Object} config - 面板配置
+     */
+    registerPanel(panelId, config) {
+      console.log(`[CesiumToolbar] 注册面板: ${panelId}`, config);
+
+      this.registeredPanels.set(panelId, {
+        ...config,
+        visible: false
+      });
+
+      this.$emit('panel-registered', { panelId, config });
+    },
+
+    /**
+     * 注销面板
+     * @param {string} panelId - 面板唯一标识
+     */
+    unregisterPanel(panelId) {
+      console.log(`[CesiumToolbar] 注销面板: ${panelId}`);
+
+      this.registeredPanels.delete(panelId);
+
+      this.$emit('panel-unregistered', { panelId });
+    },
+
+    /**
+     * 更新面板可见性
+     * @param {string} panelId - 面板唯一标识
+     * @param {boolean} visible - 是否可见
+     */
+    updatePanelVisibility(panelId, visible) {
+      const panel = this.registeredPanels.get(panelId);
+      if (panel) {
+        panel.visible = visible;
+        this.registeredPanels.set(panelId, panel);
+      }
+    },
+
+    /**
+     * 获取面板信息
+     * @param {string} panelId - 面板唯一标识
+     * @returns {Object|null} 面板配置
+     */
+    getPanel(panelId) {
+      return this.registeredPanels.get(panelId) || null;
+    },
+
+    /**
+     * 获取所有已注册面板
+     * @returns {Array} 面板列表
+     */
+    getAllPanels() {
+      const panels = [];
+      this.registeredPanels.forEach((panel, panelId) => {
+        panels.push({ id: panelId, ...panel });
+      });
+      return panels;
     },
 
     /**
      * 切换折叠状态
      */
     toggleCollapse() {
-      this.isCollapsed = !this.isCollapsed
-      this.$emit('toggle-collapse', this.isCollapsed)
+      this.isCollapsed = !this.isCollapsed;
+      this.$emit('toggle-collapse', this.isCollapsed);
     }
   }
-}
+};
 </script>
 
 <style scoped>
+/* 定位 */
 .cesium-toolbar {
-  /* 定位 */
   position: fixed;
   top: 10px;
   left: 50%;
@@ -185,7 +415,7 @@ export default {
   z-index: 200000;
 
   /* Glassmorphism 效果 */
-  background: rgba(15, 23, 42, 0.85); /* #0F172A with 85% opacity */
+  background: rgba(15, 23, 42, 0.85);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
 
@@ -244,7 +474,7 @@ export default {
   border-radius: 50%;
 
   /* 状态指示色 */
-  background: #22C55E; /* CTA 绿色 */
+  background: #22C55E;
   box-shadow: 0 0 8px rgba(34, 197, 94, 0.5);
 
   /* 动画 */

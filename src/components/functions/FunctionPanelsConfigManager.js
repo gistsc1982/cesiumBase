@@ -4,9 +4,10 @@
  * 用于管理 functionPanels.config.json 配置文件
  * 提供读取、添加、删除、启用/禁用、显示/隐藏面板等功能
  *
- * 当前面板数量：2个
+ * 当前面板数量：3个
  * - TestPanel（测试面板）
  * - ObliquePhotographyPanel（倾斜摄影面板）
+ * - ObliquePhotographyPanelExample（测试面板示例）
  */
 
 import config from './functionPanels.config.json';
