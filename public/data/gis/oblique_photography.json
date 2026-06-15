@@ -1,4 +1,12 @@
 [
-  {"id":"bridge3d","name":"街区1233","url":"https://wckj2020.obs.myhuaweicloud.com/wckj/senge/bridge3D/tileset.json"},
-  {"id":"jian1","name":"吉安1号","url":"https://wckj2020.obs.cn-south-1.myhuaweicloud.com/wckj/senge/wckj2_merge/Scene/JiAn1_merge.json"}
+  {
+    "id": "bridge3d",
+    "name": "街区112",
+    "url": "https://wckj2020.obs.myhuaweicloud.com/wckj/senge/bridge3D/tileset.json"
+  },
+  {
+    "id": "jian1",
+    "name": "吉安1号",
+    "url": "https://wckj2020.obs.cn-south-1.myhuaweicloud.com/wckj/senge/wckj2_merge/Scene/JiAn1_merge.json"
+  }
 ]

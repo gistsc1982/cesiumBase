@@ -51,6 +51,20 @@ module.exports = {
                 pathRewrite: {
                     '^/api/terrain-local': '/api/terrain-local'
                 }
+            },
+            // ⭐ 代理 API 请求到 API 服务器（端口 8081）
+            // 确保 DataManager 能够访问 API 服务器的实时数据
+            '/api': {
+                target: `${process.env.VUE_APP_SERVER_BASE_URL.replace(/:\d+$/, '')}:${process.env.VUE_APP_API_PORT}`,
+                changeOrigin: true,
+                secure: false
+            },
+            // ⭐ 代理数据目录到 API 服务器（端口 8081）
+            // 确保前端加载的是 API 服务器同步的最新数据
+            '/data': {
+                target: `${process.env.VUE_APP_SERVER_BASE_URL.replace(/:\d+$/, '')}:${process.env.VUE_APP_API_PORT}`,
+                changeOrigin: true,
+                secure: false
             }
         }
     },

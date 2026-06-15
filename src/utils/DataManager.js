@@ -166,9 +166,10 @@ class DataManager {
     }
 
     try {
-      // 使用数据文件 URL（静态文件服务）
-      const url = this.getDataURL(config.relativePath);
-      console.log(`[DataManager] 📡 从服务器加载: ${url}`);
+      // ⭐ 使用 API 路由（从数据库读取实时数据），而不是静态文件
+      // API 路由: /api/data/{path}
+      const url = this.getAPIURL(`${this.serverConfig.dataAPI}/${config.relativePath}`);
+      console.log(`[DataManager] 📡 从 API 服务器加载: ${url}`);
 
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), this.serverConfig.timeout);
@@ -186,17 +187,40 @@ class DataManager {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`);
       }
 
-      const data = await response.json();
+      const result = await response.json();
 
-      console.log(`[DataManager] ✅ 从服务器加载成功，数据项: ${Array.isArray(data) ? data.length : Object.keys(data).length}`);
-
-      return data;
+      // API 返回格式: { success: true, source: 'database', data: [...] }
+      if (result.success && result.data) {
+        console.log(`[DataManager] ✅ 从 API 服务器加载成功，数据项: ${Array.isArray(result.data) ? result.data.length : Object.keys(result.data).length}`);
+        console.log(`[DataManager] 数据来源: ${result.source}`);
+        return result.data;
+      } else {
+        throw new Error(result.error || '加载数据失败');
+      }
     } catch (error) {
       if (error.name === 'AbortError') {
         console.error(`[DataManager] ❌ 加载超时`);
       } else {
-        console.error(`[DataManager] ❌ 从服务器加载失败:`, error);
+        console.error(`[DataManager] ❌ 从 API 服务器加载失败:`, error);
       }
+
+      // ⭐ API 失败时，回退到静态文件
+      console.log(`[DataManager] 🔄 回退到静态文件加载`);
+      try {
+        const url = this.getDataURL(config.relativePath);
+        const response = await fetch(url, {
+          cache: 'no-cache'
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          console.log(`[DataManager] ✅ 从静态文件加载成功`);
+          return data;
+        }
+      } catch (fallbackError) {
+        console.error(`[DataManager] ❌ 静态文件加载也失败:`, fallbackError);
+      }
+
       return null;
     }
   }

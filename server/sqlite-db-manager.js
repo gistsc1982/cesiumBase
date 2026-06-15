@@ -500,9 +500,26 @@ class DatabaseManager {
           // 确保目录存在
           await fs.mkdir(dir, { recursive: true });
 
-          // 写入文件
+          // 写入文件（只在内容变化时才写入）
           const jsonData = JSON.stringify(data, null, 2);
-          await fs.writeFile(filePath, jsonData, 'utf8');
+
+          // 检查文件是否已存在且内容相同
+          let needsWrite = true;
+          try {
+            const existingContent = await fs.readFile(filePath, 'utf8');
+            if (existingContent === jsonData) {
+              needsWrite = false;
+              console.log(`⏭️ 跳过（内容未变）: ${configPath}`);
+            }
+          } catch (readError) {
+            // 文件不存在，需要写入
+            needsWrite = true;
+          }
+
+          if (needsWrite) {
+            await fs.writeFile(filePath, jsonData, 'utf8');
+            console.log(`📤 已同步: ${configPath}`);
+          }
 
           results.push({
             path: configPath,

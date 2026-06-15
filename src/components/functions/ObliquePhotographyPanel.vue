@@ -548,21 +548,18 @@ export default {
     }
   },
   mounted() {
-    // ⭐ 单例模式：检查是否有保存的状态
+    // ⭐ 单例模式：检查是否有保存的 Cesium 对象状态
     const savedState = panelSingletonManager.getPanelState(this.componentName);
-    const hasValidData = savedState && savedState.obliquePhotographyList && savedState.obliquePhotographyList.length > 0;
+    const hasCesiumObjects = savedState && savedState.cesiumTilesets && savedState.cesiumTilesets.size > 0;
 
-    if (hasValidData) {
-      console.log(`[${this.componentName}] 📦 恢复保存的状态（单例模式）`);
+    if (hasCesiumObjects) {
+      console.log(`[${this.componentName}] 📦 恢复保存的 Cesium 对象（单例模式）`);
 
-      // 恢复 Cesium 对象
+      // 恢复 Cesium 对象（但不恢复数据列表，数据列表总是从服务器加载）
       this._cesiumTilesets = savedState.cesiumTilesets;
       this._cesiumTransforms = savedState.cesiumTransforms;
       this._cesiumHeightOffsets = savedState.cesiumHeightOffsets;
       this._cesiumErrorHandlers = savedState.cesiumErrorHandlers;
-
-      // 恢复倾斜摄影列表状态
-      this.obliquePhotographyList = savedState.obliquePhotographyList;
 
       // 重新设置错误处理器（事件监听器需要重新绑定）
       this._cesiumErrorHandlers.forEach((data, id) => {
@@ -575,29 +572,30 @@ export default {
     this.initCesium(() => {
       console.log(`[${this.componentName}] Cesium 已就绪，面板初始化完成`);
 
-      // ⭐ 等待 Cesium 就绪后再加载数据
-      if (!hasValidData) {
-        // 没有有效数据：从 JSON 加载
-        console.log(`[${this.componentName}] 📂 没有保存的有效数据，从 JSON 加载`);
-        this.loadFromJson();
-      } else {
-        // 有有效数据：恢复 Cesium 对象
-        console.log(`[${this.componentName}] 🔄 有保存的数据，恢复 Cesium 对象`);
-        this.restoreCesiumObjects();
-      }
+      // ⭐ 始终从服务器加载最新数据，不使用单例管理器缓存的数据
+      // 这样确保页面刷新后显示的是最新数据
+      console.log(`[${this.componentName}] 📂 从服务器加载最新配置数据`);
+      this.loadFromJson().then(() => {
+        // 数据加载完成后，如果有保存的 Cesium 对象，恢复它们
+        if (hasCesiumObjects) {
+          console.log(`[${this.componentName}] 🔄 恢复 Cesium 对象状态`);
+          this.restoreCesiumObjects();
+        }
+      });
     });
   },
   beforeUnmount() {
-    // ⭐ 单例模式：保存面板状态到单例管理器
-    console.log(`[${this.componentName}] 💾 保存面板状态到单例管理器`);
+    // ⭐ 单例模式：保存 Cesium 对象到单例管理器（不保存数据列表）
+    console.log(`[${this.componentName}] 💾 保存 Cesium 对象到单例管理器`);
 
-    // 保存面板状态到单例管理器
+    // 保存面板状态到单例管理器（只保存 Cesium 对象，不保存数据列表）
+    // 数据列表总是从服务器加载最新数据
     panelSingletonManager.savePanelState(this.componentName, {
       cesiumTilesets: this._cesiumTilesets,
       cesiumTransforms: this._cesiumTransforms,
       cesiumHeightOffsets: this._cesiumHeightOffsets,
       cesiumErrorHandlers: this._cesiumErrorHandlers,
-      obliquePhotographyList: this.obliquePhotographyList
+      obliquePhotographyList: []  // ⭐ 不再保存数据列表，总是从服务器加载
     });
 
     // ⚡ 清理事件监听器（避免内存泄漏）
@@ -681,22 +679,38 @@ export default {
 
     /**
      * 从JSON文件加载数据
+     * ⭐ 优先从 API 服务器加载（实时数据），失败时回退到静态文件
      */
     async loadFromJson() {
       try {
-        console.log(`[${this.componentName}] 📂 开始加载JSON文件: ${JSON_FILE_PATH}`);
+        console.log(`[${this.componentName}] 📂 开始加载配置数据: ${CONFIG_ID}`);
 
-        const response = await fetch(JSON_FILE_PATH);
+        let data = null;
+        let dataSource = '';
 
-        console.log(`[${this.componentName}] 📡 HTTP响应状态: ${response.status} ${response.statusText}`);
+        // ⭐ 优先尝试从 API 服务器加载（从数据库读取，实时数据）
+        try {
+          data = await dataManager.loadFromServer(CONFIG_ID);
+          dataSource = 'API服务器（数据库）';
+          console.log(`[${this.componentName}] ✅ 从 API 服务器加载数据成功`);
+        } catch (apiError) {
+          console.warn(`[${this.componentName}] ⚠️ API 服务器加载失败，尝试静态文件:`, apiError.message);
 
-        if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}, text: ${response.statusText}`);
+          // 回退：从静态文件加载
+          const response = await fetch(JSON_FILE_PATH, {
+            cache: 'no-cache'
+          });
+
+          if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+          }
+
+          data = await response.json();
+          dataSource = '静态文件';
+          console.log(`[${this.componentName}] ✅ 从静态文件加载数据成功`);
         }
 
-        const data = await response.json();
-
-        console.log(`[${this.componentName}] 📦 JSON解析成功，原始数据:`, data);
+        console.log(`[${this.componentName}] 📦 数据来源: ${dataSource}, 原始数据:`, data);
 
         // 验证数据格式
         if (!Array.isArray(data)) {
@@ -777,6 +791,42 @@ export default {
       }
 
       return result.success;
+    },
+
+    /**
+     * 自动保存配置到服务器（无用户提示）
+     * 在添加/编辑/删除操作后自动调用
+     */
+    async saveToJson() {
+      try {
+        // 提取需要保存的数据（排除运行时状态）
+        const saveData = this.obliquePhotographyList.map(item => ({
+          id: item.id,
+          name: item.name,
+          url: item.url
+        }));
+
+        // 验证数据
+        const validation = dataManager.validateConfig(CONFIG_ID, saveData);
+        if (!validation.valid) {
+          console.error(`[${this.componentName}] ❌ 数据验证失败:`, validation.errors);
+          return false;
+        }
+
+        // 上传到服务器（静默保存，不显示提示）
+        const result = await dataManager.uploadToServer(CONFIG_ID, saveData);
+
+        if (result.success) {
+          console.log(`[${this.componentName}] ✅ 配置已自动保存到服务器`);
+        } else {
+          console.error(`[${this.componentName}] ❌ 自动保存失败:`, result.error);
+        }
+
+        return result.success;
+      } catch (error) {
+        console.error(`[${this.componentName}] ❌ saveToJson 错误:`, error);
+        return false;
+      }
     },
 
     /**
