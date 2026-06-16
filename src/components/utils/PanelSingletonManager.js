@@ -490,11 +490,17 @@ class PanelSingletonManager {
     }
 
     // 更新容器显示状态
+    const oldDisplay = container.style.display;
     container.style.display = visible ? 'block' : 'none';
     containerConfig.visible = visible;
     containerConfig.isClosed = !visible;
 
-    console.log(`[PanelSingletonManager] 🔄 更新 mjs 容器可见性: ${panelName}, visible: ${visible}`);
+    console.log(`[PanelSingletonManager] 🔄 更新 mjs 容器可见性: ${panelName}, visible: ${visible}, display: ${oldDisplay} -> ${container.style.display}, container:`, container);
+
+    // 验证更新是否成功
+    if (visible && container.style.display === 'none') {
+      console.error(`[PanelSingletonManager] ❌ 尝试显示容器但 display 仍为 none: ${panelName}`);
+    }
   }
 
   /**

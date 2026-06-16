@@ -385,6 +385,35 @@ async function loadMjsComponent(componentName, panelConfig) {
       isClosed: panelConfig.visible === false
     });
 
+    // ⭐ 挂载 Vue 应用到容器
+    const container = document.getElementById(containerId);
+    if (!container) {
+      console.error(`[CesiumMain] ❌ 单例容器不存在: ${containerId}`);
+      return null;
+    }
+
+    // 检查是否已经挂载（通过检查容器中是否有 Vue 应用的根元素）
+    const hasVueApp = container.children.length > 0 || container.querySelector('[data-v-app]') || container.__vue_app__;
+    if (hasVueApp) {
+      console.log(`[CesiumMain] ℹ️ 单例容器已挂载 Vue 应用: ${componentName}`);
+    } else {
+      // 导入 Vue 并挂载应用
+      const Vue = await import('vue');
+      const { createApp, h } = Vue;
+
+      const app = createApp({
+        data() {
+          return { loaded: true };
+        },
+        render() {
+          return h(iifeComponent);
+        }
+      });
+
+      app.mount(container);
+      console.log(`[CesiumMain] ✅ 单例 Vue 应用已挂载: ${componentName} -> ${containerId}`);
+    }
+
     // ⭐ 注册单例 mjs 组件到 panelRegistry（组件为 null，因为使用全局容器）
     panelSingletonManager.registerPanel(componentName, {
       component: null,  // 单例 mjs 组件使用全局容器，不需要 Vue 组件
@@ -880,9 +909,91 @@ export default {
           }
 
           console.log(`[CesiumMain] ✅ 注册 mjs 容器: ${config.name} -> ${containerId}, visible: ${config.visible !== false}`);
+
+          // ⭐ 挂载 Vue 应用到容器（如果配置中可见）
+          if (config.visible !== false) {
+            this.mountMjsSingletonApp(config.name, config);
+          }
         }
       } catch (error) {
         console.error('[CesiumMain] ❌ 注册 mjs 容器失败:', error);
+      }
+    },
+
+    /**
+     * 挂载单例 mjs 应用的 Vue 应用到容器
+     * @param {string} componentName - 组件名称
+     * @param {Object} panelConfig - 面板配置
+     */
+    async mountMjsSingletonApp(componentName, panelConfig) {
+      try {
+        console.log(`[CesiumMain] 🔄 开始挂载单例 mjs 应用: ${componentName}`);
+
+        const globalVarName = panelConfig.iifeGlobalVar || panelSingletonManager.getIifeGlobalVarName(componentName);
+        const iifeComponent = window[globalVarName];
+
+        if (!iifeComponent) {
+          console.warn(`[CesiumMain] ⚠️ 单例 mjs 组件的 IIFE 版本未加载: ${componentName} (${globalVarName})`);
+          return;
+        }
+
+        const containerId = panelSingletonManager.getMjsContainerId(componentName);
+        const container = document.getElementById(containerId);
+
+        if (!container) {
+          console.error(`[CesiumMain] ❌ 单例容器不存在: ${containerId}`);
+          return;
+        }
+
+        // ⭐ 调试容器样式
+        const computedStyle = window.getComputedStyle(container);
+        console.log(`[CesiumMain] 📦 单例容器找到: ${containerId}`, {
+          尺寸: `${container.offsetWidth}x${container.offsetHeight}`,
+          类名: container.className,
+          显示: computedStyle.display,
+          位置: computedStyle.position,
+          宽度: computedStyle.width,
+          高度: computedStyle.height,
+          最小高度: computedStyle.minHeight,
+          最大高度: computedStyle.maxHeight
+        });
+
+        // 检查是否已经挂载
+        const hasVueApp = container.children.length > 0 || container.querySelector('[data-v-app]') || container.__vue_app__;
+        if (hasVueApp) {
+          console.log(`[CesiumMain] ℹ️ 单例容器已挂载 Vue 应用: ${componentName}`);
+          return;
+        }
+
+        // 导入 Vue 并挂载应用
+        const Vue = await import('vue');
+        const { createApp, h } = Vue;
+
+        const app = createApp({
+          data() {
+            return { loaded: true };
+          },
+          render() {
+            return h(iifeComponent);
+          }
+        });
+
+        app.mount(container);
+
+        // ⭐ 强制更新容器尺寸（等待 DOM 更新）
+        await new Promise(resolve => setTimeout(resolve, 100));
+
+        const rect = container.getBoundingClientRect();
+        console.log(`[CesiumMain] 📐 挂载后容器尺寸: ${rect.width}x${rect.height}`);
+
+        // ⭐ 设置全局标志，避免重复初始化
+        if (typeof window !== 'undefined') {
+          window.__dualCanvasViewerApp__ = app;
+        }
+
+        console.log(`[CesiumMain] ✅ 单例 Vue 应用已挂载: ${componentName} -> ${containerId}`);
+      } catch (error) {
+        console.error(`[CesiumMain] ❌ 挂载单例 mjs 应用失败: ${componentName}`, error);
       }
     },
 
@@ -1349,12 +1460,20 @@ export default {
      * @param {Object} panelConfig - 面板配置
      */
     async createMjsMultiInstance(panelId, panelConfig) {
-      // ⭐ 清理单例容器（如果配置了 singletonContainerId）
+      // ⭐ 隐藏单例容器（如果配置了 singletonContainerId）
+      // 不删除容器，只是隐藏，这样单例模式可以重新显示
       if (panelConfig.singletonContainerId) {
         const singletonContainer = document.getElementById(panelConfig.singletonContainerId);
         if (singletonContainer) {
-          console.log(`[CesiumMain] 🧹 清理单例容器: ${panelConfig.singletonContainerId}`);
-          singletonContainer.remove();
+          console.log(`[CesiumMain] 🙈 隐藏单例容器: ${panelConfig.singletonContainerId}`);
+          singletonContainer.style.display = 'none';
+
+          // 同步更新 PanelSingletonManager 中的可见性状态
+          // 查找使用此容器的单例面板
+          const singletonPanelName = this.findSingletonPanelByContainerId(panelConfig.singletonContainerId);
+          if (singletonPanelName && panelSingletonManager.hasPanel(singletonPanelName)) {
+            panelSingletonManager.updatePanelVisible(singletonPanelName, false);
+          }
         }
       }
 
@@ -1547,7 +1666,39 @@ export default {
         );
 
         console.log(`[CesiumMain] ✅ mjs 多实例已销毁: ${instanceKey}`);
+
+        // ⭐ 恢复单例容器的显示状态（如果配置了 singletonContainerId）
+        const panelConfig = getPanelConfig(panelId);
+        if (panelConfig?.singletonContainerId) {
+          const singletonPanelName = this.findSingletonPanelByContainerId(panelConfig.singletonContainerId);
+          if (singletonPanelName && panelSingletonManager.hasPanel(singletonPanelName)) {
+            // 检查单例面板是否应该是可见的
+            const singletonPanel = panelSingletonManager.getPanel(singletonPanelName);
+            if (singletonPanel && singletonPanel.visible) {
+              const singletonContainer = document.getElementById(panelConfig.singletonContainerId);
+              if (singletonContainer) {
+                console.log(`[CesiumMain] 🔄 恢复单例容器显示: ${panelConfig.singletonContainerId}`);
+                singletonContainer.style.display = 'block';
+              }
+            }
+          }
+        }
       }
+    },
+
+    /**
+     * 根据容器 ID 查找单例面板名称
+     * @param {string} containerId - 容器 ID
+     * @returns {string|null} 面板名称
+     */
+    findSingletonPanelByContainerId(containerId) {
+      const configs = getAvailablePanelConfigs();
+      for (const config of configs) {
+        if (config.singleton === true && config.singletonContainerId === containerId) {
+          return config.name;
+        }
+      }
+      return null;
     },
 
     // ==================== 双画布控制面板方法 ====================
@@ -2397,6 +2548,12 @@ export default {
     // ==================== DualCanvasViewer 初始化 ====================
 
     initDualCanvasViewer() {
+      // ⭐ 检查是否已经通过新的面板系统初始化
+      if (window.__dualCanvasViewerApp__) {
+        console.log('[HelloWorld] ⏭️ DualCanvasViewer 已通过面板系统初始化，跳过旧的初始化流程');
+        return;
+      }
+
       const checkReady = () => {
         // ⭐ 新的 SFC 加载方式检查
         const hasXeokit = typeof window.xeokitSDK !== 'undefined';
@@ -8791,13 +8948,26 @@ body,
 
 /* dual-canvas-viewer 覆盖层容器 - 全屏叠加 */
 .dual-canvas-overlay {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
+  position: fixed !important; /* ⭐ 改为 fixed，确保相对于视口定位 */
+  top: 0 !important;
+  left: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
   z-index: 99995; /* ⭐ 低于工具条和所有面板 */
   pointer-events: auto;
+  background: transparent !important;
+  background-color: transparent !important;
+}
+
+/* ⭐ 针对 #dualCanvasContainer 的具体规则（最高优先级） */
+#dualCanvasContainer.dual-canvas-overlay {
+  position: fixed !important;
+  top: 0 !important;
+  left: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+  z-index: 99995 !important;
+  pointer-events: auto !important;
   background: transparent !important;
   background-color: transparent !important;
 }
@@ -9728,4 +9898,33 @@ body,
   pointer-events: auto !important;
 }
 
+</style>
+
+<!-- ⭐ 全局样式（非作用域，应用于 index.html 中的容器） -->
+<style>
+/* dual-canvas-viewer 覆盖层容器 - 全屏叠加 */
+.dual-canvas-overlay {
+  position: fixed !important; /* ⭐ 改为 fixed，确保相对于视口定位 */
+  top: 0 !important;
+  left: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+  z-index: 99995; /* ⭐ 低于工具条和所有面板 */
+  pointer-events: auto;
+  background: transparent !important;
+  background-color: transparent !important;
+}
+
+/* ⭐ 针对 #dualCanvasContainer 的具体规则（最高优先级） */
+#dualCanvasContainer.dual-canvas-overlay {
+  position: fixed !important;
+  top: 0 !important;
+  left: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+  z-index: 99995 !important;
+  pointer-events: auto !important;
+  background: transparent !important;
+  background-color: transparent !important;
+}
 </style>
