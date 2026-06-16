@@ -65,6 +65,7 @@
     <!-- ⭐ Cesium 工具条 -->
     <CesiumToolbar
       ref="toolbar"
+      :panel-configs="availablePanelConfigs"
       @button-click="handleToolbarButtonClick"
       @panel-toggle="handleToolPanelToggle"
     />
@@ -298,6 +299,14 @@ async function loadFunctionPanel(componentName) {
     throw new Error(`Panel component is disabled: ${componentName}`);
   }
 
+  // ⭐ 检查是否为 .mjs 类型组件（支持所有 mjs 组件的统一处理）
+  const isMjsComponent = panelConfig && panelConfig.file && panelConfig.file.endsWith('.mjs');
+
+  if (isMjsComponent) {
+    console.log(`[CesiumMain] 📦 检测到 .mjs 组件: ${componentName}`);
+    return loadMjsComponent(componentName, panelConfig);
+  }
+
   // 检查缓存
   if (COMPONENT_CACHE.has(componentName)) {
     console.log(`[CesiumMain] 📦 从缓存加载面板组件: ${componentName}`);
@@ -342,6 +351,111 @@ async function loadFunctionPanel(componentName) {
   LOADING_PROMISES.set(componentName, loadPromise);
 
   return loadPromise;
+}
+
+/**
+ * 加载 .mjs 类型组件（支持单例和多实例模式）
+ * @param {string} componentName - 组件名称
+ * @param {Object} panelConfig - 面板配置
+ * @returns {Promise<Object>} 组件对象
+ */
+async function loadMjsComponent(componentName, panelConfig) {
+  const isSingleton = panelConfig.singleton !== false; // 默认为单例
+
+  if (isSingleton) {
+    // ⭐ 单例模式：使用 IIFE 版本（通过 index.html 预加载）
+    // 使用 PanelSingletonManager 的方法获取全局变量名
+    const globalVarName = panelConfig.iifeGlobalVar || panelSingletonManager.getIifeGlobalVarName(componentName);
+    const iifeComponent = window[globalVarName];
+
+    if (!iifeComponent) {
+      console.warn(`[CesiumMain] ⚠️ 单例 mjs 组件的 IIFE 版本未加载: ${componentName} (${globalVarName})`);
+      // 回退到多实例模式
+      return await loadMjsMultiInstance(componentName, panelConfig);
+    }
+
+    console.log(`[CesiumMain] ✅ 使用 IIFE 全局组件: ${componentName} -> ${globalVarName}`);
+
+    // 注册 mjs 容器到 PanelSingletonManager（使用 PanelSingletonManager 的方法获取容器 ID）
+    const containerId = panelSingletonManager.getMjsContainerId(componentName);
+    panelSingletonManager.registerMjsContainer(componentName, {
+      containerId,
+      iifeGlobalVar: globalVarName,
+      visible: panelConfig.visible !== false,
+      isClosed: panelConfig.visible === false
+    });
+
+    // ⭐ 注册单例 mjs 组件到 panelRegistry（组件为 null，因为使用全局容器）
+    panelSingletonManager.registerPanel(componentName, {
+      component: null,  // 单例 mjs 组件使用全局容器，不需要 Vue 组件
+      props: {},
+      visible: panelConfig.visible !== false,
+      isClosed: panelConfig.visible === false
+    });
+
+    // ⭐ 单例模式返回 null（不通过 Vue 渲染，使用全局容器）
+    return null;
+  } else {
+    // ⭐ 多实例模式：直接返回组件
+    return await loadMjsMultiInstance(componentName, panelConfig);
+  }
+}
+
+/**
+ * 加载 .mjs 多实例组件
+ * @param {string} componentName - 组件名称
+ * @param {Object} panelConfig - 面板配置
+ * @returns {Promise<Component>} Vue 组件
+ */
+async function loadMjsMultiInstance(componentName, panelConfig) {
+  const { loadModule } = window['vue3-sfc-loader'];
+  const Vue = await import('vue');
+
+  // 解析 .mjs 文件路径
+  const componentPath = await resolveMjsResourcePath(panelConfig.file);
+
+  // 加载组件
+  const module = await loadModule(componentPath, getSFCOptions(Vue));
+
+  console.log(`[CesiumMain] ✅ 多实例 mjs 组件加载成功: ${componentName}`);
+
+  // ⭐ 直接返回实际组件
+  return module.default;
+}
+
+/**
+ * 解析 .mjs 资源路径
+ * @param {string} fileName - .mjs 文件名或路径
+ * @returns {Promise<string>} 完整路径
+ */
+async function resolveMjsResourcePath(fileName) {
+  // 如果 fileName 包含路径分隔符，认为是完整路径，直接使用
+  if (fileName.includes('/')) {
+    return `/${fileName}`;
+  }
+  // 默认从 public/libs 目录加载
+  return `/libs/${fileName}`;
+}
+
+/**
+ * 获取 vue3-sfc-loader 配置选项
+ * @param {Object} Vue - Vue 对象
+ * @returns {Object} SFC 配置选项
+ */
+function getSFCOptions(Vue) {
+  return {
+    moduleCache: {
+      vue: Vue
+    },
+    getFile(url) {
+      return fetch(url).then(response => response.text());
+    },
+    addStyle(textContent) {
+      const style = document.createElement('style');
+      style.textContent = textContent;
+      document.head.appendChild(style);
+    }
+  };
 }
 
 /**
@@ -596,6 +710,14 @@ export default {
   },
   computed: {
     /**
+     * 获取可用的面板配置列表（从配置文件读取）
+     * ⭐ 缓存配置列表避免重复调用
+     */
+    availablePanelConfigs() {
+      return getAvailablePanelConfigs();
+    },
+
+    /**
      * 获取所有可见的功能面板
      * ⭐ 由 PanelSingletonManager 和 MultiInstancePanelConfigManager 共同管理
      * ⭐ 依赖 _panelsRefreshCounter 来触发响应式更新（因为管理器是外部状态）
@@ -624,6 +746,13 @@ export default {
           isClosed: panel.isClosed,
           componentType: typeof panel.component
         });
+
+        // ⭐ 单例 mjs 组件返回 null（使用全局容器），跳过渲染
+        if (panel.visible && panel.component === null) {
+          // 通过 PanelSingletonManager 管理全局容器，不添加到渲染列表
+          console.log(`[CesiumMain #${instanceId}] ⏭️ 跳过单例 mjs 组件 ${panel.name}（由全局容器管理）`);
+          continue;
+        }
 
         if (panel.visible && panel.component && !panel.isClosed) {
           // 如果有组件引用，直接使用
@@ -717,6 +846,46 @@ export default {
       }
     },
 
+    /**
+     * 注册 mjs 容器（单例模式）
+     * 从配置文件中读取所有 singleton: true 的 .mjs 组件，并注册其全局容器
+     */
+    registerMjsContainers() {
+      try {
+        const panelConfigs = this.getAvailablePanelConfigs();
+        const mjsSingletonPanels = panelConfigs.filter(config =>
+          config.file?.endsWith('.mjs') && config.singleton !== false
+        );
+
+        console.log(`[CesiumMain] 📦 注册 ${mjsSingletonPanels.length} 个 mjs 单例容器`);
+
+        for (const config of mjsSingletonPanels) {
+          // ⭐ 使用 PanelSingletonManager 的方法生成容器 ID
+          const containerId = panelSingletonManager.getMjsContainerId(config.name);
+
+          panelSingletonManager.registerMjsContainer(config.name, {
+            containerId,
+            iifeGlobalVar: config.iifeGlobalVar,  // 使用配置中的全局变量名
+            visible: config.visible !== false,
+            isClosed: config.visible === false
+          });
+
+          // ⭐ 如果配置中可见，立即显示容器
+          if (config.visible !== false) {
+            const container = document.getElementById(containerId);
+            if (container) {
+              container.style.display = 'block';
+              console.log(`[CesiumMain] ✅ 设置 mjs 容器可见: ${config.name} (${containerId})`);
+            }
+          }
+
+          console.log(`[CesiumMain] ✅ 注册 mjs 容器: ${config.name} -> ${containerId}, visible: ${config.visible !== false}`);
+        }
+      } catch (error) {
+        console.error('[CesiumMain] ❌ 注册 mjs 容器失败:', error);
+      }
+    },
+
     // ==================== 功能面板自动加载 ====================
 
     /**
@@ -760,11 +929,16 @@ export default {
                 };
                 console.log(`[CesiumMain #${instanceId}] 📋 预注册面板: ${name}, visible: ${isVisible}, props:`, panelProps);
 
-                this.registerPanelComponent(name, {
-                  component,
-                  props: panelProps,
-                  visible: isVisible
-                });
+                // ⭐ 跳过 IIFE 全局组件（已经在 loadMjsComponent 中注册）
+                if (component === null) {
+                  console.log(`[CesiumMain #${instanceId}] ⏭️ 跳过 IIFE 全局组件注册: ${name}`);
+                } else {
+                  this.registerPanelComponent(name, {
+                    component,
+                    props: panelProps,
+                    visible: isVisible
+                  });
+                }
               } else {
                 console.warn(`[CesiumMain #${instanceId}] ⚠️ 面板 ${name} 的配置不存在，跳过注册`);
               }
@@ -787,6 +961,13 @@ export default {
     async loadFunctionPanel(componentName) {
       try {
         const component = await loadFunctionPanel(componentName);
+
+        // ⭐ 单例 mjs 组件返回 null，不需要缓存（使用全局容器）
+        if (component === null) {
+          console.log(`[CesiumMain] ⏭️ 单例 mjs 组件不缓存组件: ${componentName}`);
+          return null;
+        }
+
         // 缓存到组件实例（使用 markRaw 避免响应式包装）
         this.functionPanelComponents[componentName] = markRaw(component);
         return component;
@@ -8197,6 +8378,9 @@ async loadTestSfcComponent(instanceId) {
 
     // 缓存 instanceId 避免重复访问
     const instanceId = this.instanceId || 1;
+
+    // ⭐ 注册 mjs 容器（单例模式）
+    this.registerMjsContainers();
 
     // ⭐ 预加载面板将在 Cesium 初始化完成后执行
     // 避免面板组件在 Cesium 未就绪时初始化超时

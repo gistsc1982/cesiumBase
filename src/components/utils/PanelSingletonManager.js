@@ -48,6 +48,10 @@ class PanelSingletonManager {
     // Map<panelName, Set<callback>>
     this.eventListeners = new Map();
 
+    // ⭐ mjs 组件全局容器映射（用于管理 IIFE 加载的单例 mjs 组件）
+    // Map<panelName, { containerId, iifeGlobalVar, visible, isClosed }>
+    this.mjsContainers = new Map();
+
     console.log('[PanelSingletonManager] 初始化完成');
   }
 
@@ -280,11 +284,12 @@ class PanelSingletonManager {
 
   /**
    * 检查面板是否已注册
+   * ⭐ 同时检查 panelRegistry 和 mjsContainers
    * @param {string} panelName - 面板名称
    * @returns {boolean} 是否已注册
    */
   hasPanel(panelName) {
-    return this.panelRegistry.has(panelName);
+    return this.panelRegistry.has(panelName) || this.mjsContainers.has(panelName);
   }
 
   /**
@@ -304,6 +309,21 @@ class PanelSingletonManager {
    * @param {boolean} visible - 是否可见
    */
   updatePanelVisible(panelName, visible) {
+    // ⭐ 优先检查是否为 mjs 容器
+    if (this.isMjsContainer(panelName)) {
+      this.updateMjsContainerVisible(panelName, visible);
+
+      // 触发事件
+      this.emitEvent(panelName, {
+        type: 'visibleChange',
+        panelName,
+        visible,
+        isClosed: !visible
+      });
+      return;
+    }
+
+    // 原有 Vue 面板逻辑
     const panel = this.panelRegistry.get(panelName);
     if (panel) {
       panel.visible = visible;
@@ -381,6 +401,129 @@ class PanelSingletonManager {
   clearRegistry() {
     this.panelRegistry.clear();
     console.log('[PanelSingletonManager] 🗑️ 清空面板注册表');
+  }
+
+  // ==================== mjs 组件全局容器管理 ====================
+
+  /**
+   * 获取 mjs 组件的容器 DOM ID
+   * @param {string} componentName - 组件名称
+   * @returns {string} 容器 DOM ID
+   */
+  getMjsContainerId(componentName) {
+    // 特殊处理：DualCanvasViewer 使用固定的容器 ID
+    if (componentName === 'DualCanvasViewer') {
+      return 'dualCanvasContainer';
+    }
+    // 默认使用驼峰命名
+    return `${componentName}Container`;
+  }
+
+  /**
+   * 获取 IIFE 全局变量名（可选的辅助方法）
+   * @param {string} componentName - 组件名称
+   * @returns {string} IIFE 全局变量名
+   */
+  getIifeGlobalVarName(componentName) {
+    // 特殊处理：DualCanvasViewer 使用特定的全局变量名
+    if (componentName === 'DualCanvasViewer') {
+      return 'DualCanvasViewerPlugin';
+    }
+    // 通用规范：直接使用组件名
+    return componentName;
+  }
+
+  /**
+   * 注册 mjs 组件全局容器
+   * @param {string} panelName - 面板名称
+   * @param {Object} containerConfig - 容器配置
+   * @param {string} containerConfig.containerId - 容器DOM ID（可选，不提供则自动生成）
+   * @param {string} containerConfig.iifeGlobalVar - IIFE全局变量名（可选，不提供则自动生成）
+   */
+  registerMjsContainer(panelName, containerConfig = {}) {
+    const containerId = containerConfig.containerId || this.getMjsContainerId(panelName);
+    const iifeGlobalVar = containerConfig.iifeGlobalVar || this.getIifeGlobalVarName(panelName);
+
+    this.mjsContainers.set(panelName, {
+      containerId,
+      iifeGlobalVar,
+      visible: containerConfig.visible !== false,
+      isClosed: containerConfig.visible === false
+    });
+    console.log(`[PanelSingletonManager] ✅ 注册 mjs 容器: ${panelName}`, { containerId, iifeGlobalVar });
+
+    // ⭐ 立即应用可见性状态到 DOM
+    const visible = containerConfig.visible !== false;
+    this.updateMjsContainerVisible(panelName, visible);
+  }
+
+  /**
+   * 注销 mjs 容器
+   * @param {string} panelName - 面板名称
+   */
+  unregisterMjsContainer(panelName) {
+    const deleted = this.mjsContainers.delete(panelName);
+    if (deleted) {
+      console.log(`[PanelSingletonManager] 🗑️ 注销 mjs 容器: ${panelName}`);
+    } else {
+      console.warn(`[PanelSingletonManager] ⚠️ mjs 容器未注册: ${panelName}`);
+    }
+    return deleted;
+  }
+
+  /**
+   * 更新 mjs 容器可见性（由 updatePanelVisible 调用）
+   * @param {string} panelName - 面板名称
+   * @param {boolean} visible - 是否可见
+   */
+  updateMjsContainerVisible(panelName, visible) {
+    const containerConfig = this.mjsContainers.get(panelName);
+    if (!containerConfig) {
+      console.warn(`[PanelSingletonManager] ⚠️ mjs 容器未注册: ${panelName}`);
+      return;
+    }
+
+    const container = document.getElementById(containerConfig.containerId);
+    if (!container) {
+      console.warn(`[PanelSingletonManager] ⚠️ mjs 容器 DOM 不存在: ${containerConfig.containerId}`);
+      return;
+    }
+
+    // 更新容器显示状态
+    container.style.display = visible ? 'block' : 'none';
+    containerConfig.visible = visible;
+    containerConfig.isClosed = !visible;
+
+    console.log(`[PanelSingletonManager] 🔄 更新 mjs 容器可见性: ${panelName}, visible: ${visible}`);
+  }
+
+  /**
+   * 获取 mjs 容器配置
+   * @param {string} panelName - 面板名称
+   * @returns {Object|null} 容器配置
+   */
+  getMjsContainer(panelName) {
+    return this.mjsContainers.get(panelName) || null;
+  }
+
+  /**
+   * 检查是否为 mjs 容器
+   * @param {string} panelName - 面板名称
+   * @returns {boolean}
+   */
+  isMjsContainer(panelName) {
+    return this.mjsContainers.has(panelName);
+  }
+
+  /**
+   * 获取所有 mjs 容器
+   * @returns {Array} mjs 容器列表
+   */
+  getAllMjsContainers() {
+    return Array.from(this.mjsContainers.entries()).map(([name, config]) => ({
+      name,
+      ...config
+    }));
   }
 
   // ==================== 事件监听器 ====================

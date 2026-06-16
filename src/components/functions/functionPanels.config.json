@@ -12,6 +12,7 @@
       "visible": true,
       "icon": "🧪",
       "category": "test",
+      "singleton": true,
       "permissions": [],
       "position": {
         "initialX": "left",
@@ -27,6 +28,7 @@
       "visible": true,
       "icon": "📷",
       "category": "tools",
+      "singleton": true,
       "permissions": [],
       "position": {
         "initialX": "center",
@@ -42,10 +44,44 @@
       "visible": true,
       "icon": "🧪",
       "category": "test",
+      "singleton": true,
       "permissions": [],
       "position": {
         "initialX": "left",
         "initialY": 150
+      }
+    },
+    {
+      "name": "DualCanvasViewer",
+      "file": "test-sfc/sfcLib/dist/dual-canvas-viewer-sfc/lib/dual-canvas-viewer.mjs",
+      "title": "双画布查看器",
+      "description": "双画布查看器（单例模式）",
+      "enabled": true,
+      "visible": true,
+      "icon": "🖥️",
+      "category": "tools",
+      "singleton": true,
+      "iifeGlobalVar": "DualCanvasViewerPlugin",
+      "permissions": [],
+      "position": {
+        "initialX": "right",
+        "initialY": 80
+      }
+    },
+    {
+      "name": "DualCanvasViewerMulti",
+      "file": "test-sfc/sfcLib/dist/dual-canvas-viewer-sfc/lib/dual-canvas-viewer.mjs",
+      "title": "双画布查看器",
+      "description": "双画布查看器（多实例模式）",
+      "enabled": true,
+      "visible": false,
+      "icon": "🧬",
+      "category": "tools",
+      "singleton": false,
+      "permissions": [],
+      "position": {
+        "initialX": "center",
+        "initialY": 100
       }
     }
   ],

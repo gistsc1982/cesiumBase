@@ -128,6 +128,16 @@ export default {
     customButtons: {
       type: Array,
       default: () => []
+    },
+
+    /**
+     * 面板配置列表（从 functionPanels.config.json 读取）
+     * @type {Array<Object>}
+     * @default []
+     */
+    panelConfigs: {
+      type: Array,
+      default: () => []
     }
   },
 
@@ -226,9 +236,32 @@ export default {
   computed: {
     /**
      * 合并默认按钮和自定义按钮
+     * ⭐ 从 panelConfigs 动态生成按钮（如果提供）
      */
     managedButtons() {
-      const buttons = [...this.defaultButtons, ...this.customButtons];
+      let buttons = [];
+
+      // 如果提供了 panelConfigs，从配置动态生成按钮
+      if (this.panelConfigs && this.panelConfigs.length > 0) {
+        buttons = this.panelConfigs
+          .filter(config => config.enabled !== false)
+          .map(config => ({
+            id: config.name,
+            icon: config.icon || '📄',
+            label: config.title || config.name,
+            tooltip: config.description || config.title,
+            disabled: false,
+            ariaLabel: config.title || config.name,
+            action: 'toggle-panel',
+            panelId: config.name,
+            singleton: config.singleton !== false
+          }));
+
+        console.log('[CesiumToolbar] 📋 从配置生成按钮:', buttons.map(b => ({ id: b.id, singleton: b.singleton })));
+      } else {
+        // 回退到默认按钮和自定义按钮
+        buttons = [...this.defaultButtons, ...this.customButtons];
+      }
 
       // 自动更新面板按钮的 active 状态
       return buttons.map(button => {
