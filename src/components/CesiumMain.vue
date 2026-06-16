@@ -1319,49 +1319,234 @@ export default {
      */
     async createMultiInstancePanel(panelId) {
       try {
-        // 动态加载组件（如果还没加载）
-        if (!this.functionPanelComponents[panelId]) {
-          console.log(`[CesiumMain] 📦 加载面板组件: ${panelId}`);
-          await this.loadFunctionPanel(panelId);
-        }
-
-        const Component = this.functionPanelComponents[panelId];
-        if (!Component) {
-          console.error(`[CesiumMain] ❌ 组件加载失败: ${panelId}`);
+        // ⭐ 获取面板配置
+        const panelConfig = getPanelConfig(panelId);
+        if (!panelConfig) {
+          console.error(`[CesiumMain] ❌ 面板配置不存在: ${panelId}`);
           return;
         }
 
-        // 生成面板实例ID
-        const panelInstanceId = ++this._panelInstanceCounter;
+        // ⭐ 检查是否为 mjs 组件
+        const isMjsComponent = panelConfig.file && panelConfig.file.endsWith('.mjs');
 
-        // 计算位置偏移
-        const existingCount = multiInstancePanelConfigManager.getVisiblePanelInstances(this.instanceId || 1)
-          .filter(p => p.panelName === panelId).length;
-        const offsetX = 40 * existingCount;
-        const offsetY = 40 * existingCount;
+        if (isMjsComponent) {
+          // ⭐ mjs 组件：使用手动创建容器的方式（与 createDualCanvasInstance 相同）
+          console.log(`[CesiumMain] 📦 创建 mjs 多实例: ${panelId}`);
+          await this.createMjsMultiInstance(panelId, panelConfig);
+        } else {
+          // ⭐ 普通 Vue 组件：使用原有的注册方式
+          console.log(`[CesiumMain] 📦 创建 Vue 多实例: ${panelId}`);
+          await this.createVueMultiInstance(panelId, panelConfig);
+        }
+      } catch (error) {
+        console.error(`[CesiumMain] ❌ 创建多实例面板失败: ${error}`);
+      }
+    },
 
-        // 注册面板实例到管理器
-        const instanceKey = multiInstancePanelConfigManager.registerPanelInstance(
+    /**
+     * 创建 mjs 多实例面板（使用手动容器方式）
+     * @param {string} panelId - 面板ID
+     * @param {Object} panelConfig - 面板配置
+     */
+    async createMjsMultiInstance(panelId, panelConfig) {
+      // ⭐ 清理单例容器（如果配置了 singletonContainerId）
+      if (panelConfig.singletonContainerId) {
+        const singletonContainer = document.getElementById(panelConfig.singletonContainerId);
+        if (singletonContainer) {
+          console.log(`[CesiumMain] 🧹 清理单例容器: ${panelConfig.singletonContainerId}`);
+          singletonContainer.remove();
+        }
+      }
+
+      // 生成面板实例ID
+      const panelInstanceId = ++this._panelInstanceCounter;
+
+      // ⭐ 创建容器元素（使用固定容器 ID + 实例编号）
+      const baseContainerId = panelConfig.singletonContainerId || panelSingletonManager.getMjsContainerId(panelId);
+      const containerId = `${baseContainerId}-${panelInstanceId}`;
+
+      const container = document.createElement('div');
+      container.id = containerId;
+      container.className = 'dual-canvas-overlay-multiple';
+      container.style.cssText = `
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100vw;
+        height: 100vh;
+        z-index: ${100000 + panelInstanceId * 100};
+        background: transparent;
+        pointer-events: auto;
+      `;
+
+      // ⭐ 添加内容容器
+      const contentWrapper = document.createElement('div');
+      contentWrapper.style.cssText = `
+        width: 100%;
+        height: 100%;
+        position: relative;
+        pointer-events: auto;
+      `;
+      container.appendChild(contentWrapper);
+
+      // ⭐ 添加关闭按钮
+      const closeBtn = document.createElement('button');
+      closeBtn.textContent = '× 关闭';
+      closeBtn.className = 'dual-canvas-instance-close';
+      closeBtn.style.cssText = `
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        z-index: ${101500 + panelInstanceId * 100};
+        padding: 8px 16px;
+        background: rgba(244, 67, 54, 0.9);
+        color: white;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 14px;
+        font-weight: bold;
+        pointer-events: auto;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+      `;
+      closeBtn.onclick = () => this.destroyMjsMultiInstance(panelId, panelInstanceId, container);
+
+      // ⭐ 添加容器到 DOM
+      document.body.appendChild(container);
+
+      // 动态加载组件
+      if (!this.functionPanelComponents[panelId]) {
+        console.log(`[CesiumMain] 📦 加载面板组件: ${panelId}`);
+        await this.loadFunctionPanel(panelId);
+      }
+
+      const Component = this.functionPanelComponents[panelId];
+      if (!Component) {
+        console.error(`[CesiumMain] ❌ 组件加载失败: ${panelId}`);
+        container.remove();
+        return;
+      }
+
+      // ⭐ 使用 Vue.createApp 创建独立应用
+      const Vue = await import('vue');
+      const app = Vue.createApp(Component);
+      const appInstance = app.mount(contentWrapper);
+
+      console.log(`[CesiumMain] ✅ mjs 多实例已创建: ${containerId}`);
+
+      // ⭐ 添加关闭按钮到容器
+      container.appendChild(closeBtn);
+
+      // ⭐ 保存实例引用
+      if (!this.mjsMultiInstances) {
+        this.mjsMultiInstances = new Map();
+      }
+      this.mjsMultiInstances.set(`${panelId}_${panelInstanceId}`, {
+        id: panelInstanceId,
+        panelId,
+        app,
+        componentInstance: appInstance,
+        container,
+        contentWrapper,
+        closeBtn
+      });
+
+      // 注册面板实例到管理器（用于状态跟踪）
+      const instanceKey = multiInstancePanelConfigManager.registerPanelInstance(
+        this.instanceId || 1,
+        panelId,
+        {
+          component: Component,
+          props: { panelInstanceId },
+          visible: true
+        },
+        panelInstanceId
+      );
+
+      console.log(`[CesiumMain] ✅ 多实例面板已注册: ${instanceKey}`);
+    },
+
+    /**
+     * 创建 Vue 多实例面板（使用渲染系统）
+     * @param {string} panelId - 面板ID
+     * @param {Object} panelConfig - 面板配置
+     */
+    async createVueMultiInstance(panelId, panelConfig) {
+      // 动态加载组件（如果还没加载）
+      if (!this.functionPanelComponents[panelId]) {
+        console.log(`[CesiumMain] 📦 加载面板组件: ${panelId}`);
+        await this.loadFunctionPanel(panelId);
+      }
+
+      const Component = this.functionPanelComponents[panelId];
+      if (!Component) {
+        console.error(`[CesiumMain] ❌ 组件加载失败: ${panelId}`);
+        return;
+      }
+
+      // 生成面板实例ID
+      const panelInstanceId = ++this._panelInstanceCounter;
+
+      // 计算位置偏移
+      const existingCount = multiInstancePanelConfigManager.getVisiblePanelInstances(this.instanceId || 1)
+        .filter(p => p.panelName === panelId).length;
+      const offsetX = 40 * existingCount;
+      const offsetY = 40 * existingCount;
+
+      // 注册面板实例到管理器
+      const instanceKey = multiInstancePanelConfigManager.registerPanelInstance(
+        this.instanceId || 1,
+        panelId,
+        {
+          component: Component,
+          props: {
+            initialX: typeof offsetX === 'number' ? 100 + offsetX : 'center',
+            initialY: 80 + offsetY,
+            panelInstanceId: panelInstanceId
+          },
+          visible: true
+        },
+        panelInstanceId
+      );
+
+      console.log(`[CesiumMain] ✅ Vue 多实例面板已创建: ${instanceKey}`);
+
+      // 触发响应式更新
+      this._panelsRefreshCounter++;
+    },
+
+    /**
+     * 销毁 mjs 多实例
+     * @param {string} panelId - 面板ID
+     * @param {number} panelInstanceId - 实例ID
+     * @param {HTMLElement} container - 容器元素
+     */
+    destroyMjsMultiInstance(panelId, panelInstanceId, container) {
+      const instanceKey = `${panelId}_${panelInstanceId}`;
+      const instance = this.mjsMultiInstances?.get(instanceKey);
+
+      if (instance) {
+        // 卸载 Vue 应用
+        if (instance.app) {
+          instance.app.unmount();
+        }
+
+        // 移除容器
+        if (container && container.parentNode) {
+          container.parentNode.removeChild(container);
+        }
+
+        // 从实例映射中删除
+        this.mjsMultiInstances.delete(instanceKey);
+
+        // 从管理器中注销
+        multiInstancePanelConfigManager.unregisterPanelInstance(
           this.instanceId || 1,
           panelId,
-          {
-            component: Component,
-            props: {
-              initialX: typeof offsetX === 'number' ? 100 + offsetX : 'center',
-              initialY: 80 + offsetY,
-              panelInstanceId: panelInstanceId // 传递实例ID
-            },
-            visible: true
-          },
           panelInstanceId
         );
 
-        console.log(`[CesiumMain] ✅ 多实例面板已创建: ${instanceKey}`);
-
-        // 触发响应式更新
-        this._panelsRefreshCounter++;
-      } catch (error) {
-        console.error(`[CesiumMain] ❌ 创建多实例面板失败: ${error}`);
+        console.log(`[CesiumMain] ✅ mjs 多实例已销毁: ${instanceKey}`);
       }
     },
 
