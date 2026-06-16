@@ -567,9 +567,9 @@ export default {
       if (snapped) {
         // 添加吸附动画
         setTimeout(() => {
-          this.$el?.classList.add('snapped');
+          this.$refs.panelRef?.classList.add('snapped');
           setTimeout(() => {
-            this.$el?.classList.remove('snapped');
+            this.$refs.panelRef?.classList.remove('snapped');
           }, 300);
         }, 0);
       }
