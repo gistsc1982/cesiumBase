@@ -6,8 +6,8 @@
     {
       "name": "TestPanel",
       "file": "TestPanel.vue",
-      "title": "测试面板",
-      "description": "测试自动加载功能的面板",
+      "title": "TestPanel（单例）",
+      "description": "TestPanel（单例）",
       "enabled": true,
       "visible": false,
       "icon": "🧪",
@@ -19,10 +19,26 @@
         "initialY": 100
       }
     },
+     {
+      "name": "TestPanelMulti",
+      "file": "TestPanel.vue",
+      "title": "TestPanel（多实例）",
+      "description": "TestPanel（多实例）",
+      "enabled": true,
+      "visible": false,
+      "icon": "🧪",
+      "category": "test",
+      "singleton": false,
+      "permissions": [],
+      "position": {
+        "initialX": "left",
+        "initialY": 100
+      }
+    },
     {
       "name": "ObliquePhotographyPanel",
       "file": "ObliquePhotographyPanel.vue",
-      "title": "倾斜摄影面板",
+      "title": "倾斜摄影面板（单例）",
       "description": "倾斜摄影模型加载和管理面板（单例模式）",
       "enabled": true,
       "visible": false,
@@ -36,15 +52,47 @@
       }
     },
     {
+      "name": "ObliquePhotographyPanelMulti",
+      "file": "ObliquePhotographyPanel.vue",
+      "title": "倾斜摄影面板（多实例）",
+      "description": "倾斜摄影模型加载和管理面板（多实例）",
+      "enabled": true,
+      "visible": false,
+      "icon": "📷",
+      "category": "tools",
+      "singleton": false,
+      "permissions": [],
+      "position": {
+        "initialX": "center",
+        "initialY": 120
+      }
+    },
+    {
       "name": "ObliquePhotographyPanelExample",
       "file": "ObliquePhotographyPanelExample.vue",
       "title": "测试面板",
-      "description": "测试 JsonConfigPanelBase（继承示例）",
+      "description": "测试 JsonConfigPanelBase（单例继承示例）",
       "enabled": true,
       "visible": false,
       "icon": "🧪",
       "category": "test",
       "singleton": true,
+      "permissions": [],
+      "position": {
+        "initialX": "left",
+        "initialY": 150
+      }
+    },
+    {
+      "name": "ObliquePhotographyPanelExampleMulti",
+      "file": "ObliquePhotographyPanelExample.vue",
+      "title": "JsonConfigPanelBase（多实例",
+      "description": "JsonConfigPanelBase（多实例）",
+      "enabled": true,
+      "visible": false,
+      "icon": "🧪",
+      "category": "test",
+      "singleton": false,
       "permissions": [],
       "position": {
         "initialX": "left",

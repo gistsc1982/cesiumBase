@@ -5,6 +5,7 @@
   "scripts": {
     "serve": "cross-env NODE_OPTIONS=--openssl-legacy-provider vue-cli-service serve",
     "build": "cross-env NODE_OPTIONS=--openssl-legacy-provider vue-cli-service build",
+    "build:analyze": "cross-env NODE_OPTIONS=--openssl-legacy-provider vue-cli-service build --report",
     "lint": "vue-cli-service lint",
     "copy:sfc": "node scripts/copy-sfc-assets.js",
     "copy:inline": "node scripts/copy-inline-plugin.js",

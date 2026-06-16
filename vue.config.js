@@ -161,27 +161,47 @@ module.exports = {
             ]
         },
         optimization: {
+            // ⭐ 启用模块导出，减小包体积
+            moduleIds: 'deterministic',
+            // ⭐ 运行时优化
+            runtimeChunk: {
+                name: 'manifest'
+            },
             // 代码分割配置
             splitChunks: {
                 chunks: 'all',
+                // ⭐ 最小包大小限制（避免过度分割）
+                minSize: 20000,
+                maxSize: 244000,
                 cacheGroups: {
                     // 将Cesium单独打包
                     cesium: {
                         test: /[\\/]node_modules[\\/]cesium|[\\/]src[\\/]Source/,
                         name: 'cesium',
                         priority: 30,
-                        reuseExistingChunk: true
+                        reuseExistingChunk: true,
+                        // ⭐ 异步加载 Cesium
+                        enforce: true
                     },
                     // 将Three.js单独打包
                     three: {
                         test: /[\\/]node_modules[\\/]three/,
                         name: 'three',
                         priority: 25,
-                        reuseExistingChunk: true
+                        reuseExistingChunk: true,
+                        enforce: true
+                    },
+                    // ⭐ ECharts 单独打包
+                    echarts: {
+                        test: /[\\/]node_modules[\\/]echarts/,
+                        name: 'echarts',
+                        priority: 24,
+                        reuseExistingChunk: true,
+                        enforce: true
                     },
                     // 将其他大型库单独打包
                     vendors: {
-                        test: /[\\/]node_modules[\\/](?!cesium|three)/,
+                        test: /[\\/]node_modules[\\/](?!cesium|three|echarts)/,
                         name: 'vendors',
                         priority: 20,
                         reuseExistingChunk: true
@@ -196,23 +216,37 @@ module.exports = {
                     }
                 }
             },
-            // 运行时代码单独打包
-            runtimeChunk: {
-                name: 'manifest'
-            },
+            // ⭐ 其他优化选项
+            concatenateModules: true, // ⭐ 生产环境启用模块合并
+            sideEffects: true, // ⭐ 识别无副作用的模块
+            usedExports: true, // ⭐ Tree Shaking
+            minimize: true, // ⭐ 启用压缩
             minimizer: [
                 new TerserPlugin({
                     terserOptions: {
-                        ecma: undefined,
+                        ecma: 2020, // ⭐ 使用更新的 ECMAScript 版本
                         warnings: false,
                         parse: {},
                         compress: {
                             drop_console: true,
                             drop_debugger: false,
-                            pure_funcs: ['console.log', 'console.info', 'console.debug'] // 移除console
+                            pure_funcs: ['console.log', 'console.info', 'console.debug'], // 移除console
+                            // ⭐ 额外的压缩选项
+                            dead_code: true,
+                            drop_unused: true,
+                            side_effects: true
+                        },
+                        mangle: {
+                            safari10: true
+                        },
+                        output: {
+                            comments: false,
+                            // ⭐ 美化代码，使压缩后的代码更短
+                            beautify: false
                         }
                     },
-                    parallel: true // 启用多线程压缩
+                    parallel: true, // 启用多线程压缩
+                    extractComments: false // ⭐ 移除注释
                 }),
             ]
         },
@@ -238,9 +272,42 @@ module.exports = {
 
         // 生产环境优化
         if (process.env.NODE_ENV === 'production') {
-            // 移除prefetch和preload插件，减少不必要的请求
+            // ⭐ 移除prefetch和preload插件，减少不必要的请求
             config.plugins.delete('prefetch');
             config.plugins.delete('preload');
+
+            // ⭐ 优化图片加载
+            config.module
+                .rule('images')
+                .test(/\.(png|jpe?g|gif|webp)(\?.*)?$/)
+                .use('image-webpack-loader')
+                .loader('image-webpack-loader')
+                .options({
+                    mozjpeg: { progressive: true, quality: 65 },
+                    optipng: { enabled: false },
+                    pngquant: { quality: [0.65, 0.9], speed: 4 },
+                    gifsicle: { interlaced: false }
+                });
+
+            // ⭐ 启用持久化缓存
+            config.output
+                .filename('js/[name].[contenthash:8].js')
+                .chunkFilename('js/[name].[contenthash:8].js');
+
+            // ⭐ 优化 chunk 文件名
+            config.plugin('html').tap(args => {
+                args[0].filenameHashing = false; // 禁用文件名哈希（已在 output 中配置）
+                return args;
+            });
+        }
+
+        // ⭐ 开发环境优化
+        if (process.env.NODE_ENV === 'development') {
+            // 开发环境禁用某些优化以提高构建速度
+            config.optimization
+                .removeAvailableModules(false)
+                .removeEmptyChunks(false)
+                .splitChunks(false);
         }
     },
 
