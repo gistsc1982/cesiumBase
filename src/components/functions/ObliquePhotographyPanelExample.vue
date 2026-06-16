@@ -9,7 +9,7 @@
     :initial-y="initialY"
     close-event-name="obliquePhotographyPanelClose"
     config-id="oblique-photography"
-    panel-name="ObliquePhotographyPanelExample"
+    :panel-name="panelName || 'ObliquePhotographyPanelExample'"
     :field-definitions="fieldDefinitions"
     :default-form-values="defaultFormValues"
     :toolbar-buttons="toolbarButtons"
@@ -127,6 +127,10 @@ export default {
     initialY: {
       type: Number,
       default: 120
+    },
+    panelName: {
+      type: String,
+      default: null
     }
   },
 

@@ -75,7 +75,7 @@
       <component
         :is="panel.component || getFunctionPanelComponent(panel.key)"
         v-bind="panel.props"
-        @close="handlePanelClose(panel.key)"
+        @close="handlePanelClose($event?.panelKey || panel.key)"
       />
     </template>
 
@@ -1720,7 +1720,9 @@ export default {
           props: {
             initialX: typeof offsetX === 'number' ? 100 + offsetX : 'center',
             initialY: 80 + offsetY,
-            panelInstanceId: panelInstanceId
+            panelInstanceId: panelInstanceId,
+            registrationKey: panelId,
+            autoRegister: true
           },
           visible: true
         },

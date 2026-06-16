@@ -9,8 +9,6 @@
     :initial-y="initialY"
     :allow-minimize="true"
     close-event-name="obliquePhotographyPanelClose"
-    :auto-register="true"
-    registration-key="ObliquePhotographyPanel"
     @close="handleClose"
     @minimize="handleMinimize"
     @expand="handleExpand"

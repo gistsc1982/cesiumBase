@@ -180,6 +180,14 @@ export default {
     };
   },
   computed: {
+    /**
+     * ⭐ 有效的 registrationKey
+     * 如果传递了 registrationKey 就使用它，否则使用 componentName
+     * 这样子类可以不传递 registrationKey，自动使用组件名称
+     */
+    effectiveRegistrationKey() {
+      return this.registrationKey || this.componentName;
+    },
     panelStyles() {
       return {
         width: typeof this.width === 'number' ? `${this.width}px` : this.width,
@@ -202,13 +210,14 @@ export default {
   },
   mounted() {
     // 自注册逻辑 - 检查是否已注册，避免重复注册
-    if (this.autoRegister && this.registrationKey && !this._registryRegistered) {
+    // 使用 effectiveRegistrationKey，因为即使没有传递 registrationKey，也可以使用 componentName
+    if (this.autoRegister && this.effectiveRegistrationKey && !this._registryRegistered) {
       this.registerToParent();
     }
 
     // ⭐ 从 PanelSingletonManager 同步 isClosed 状态
     // 如果注册表中的 isClosed 为 false，重置组件的 isClosed 状态
-    const panelName = this.registrationKey || this.componentName;
+    const panelName = this.effectiveRegistrationKey;
     if (panelSingletonManager.hasPanel(panelName)) {
       const panel = panelSingletonManager.getPanel(panelName);
       if (panel && !panel.isClosed && this.isClosed) {
@@ -222,7 +231,7 @@ export default {
     this._panelStateChangeListener = (eventData) => {
       // ⭐ 检查事件是否针对当前面板实例
       // 优先匹配 registrationKey（如果有），其次匹配 componentName
-      const targetPanelName = this.registrationKey || this.componentName;
+      const targetPanelName = this.effectiveRegistrationKey;
       if (eventData.panelName !== targetPanelName) {
         return; // 不是当前面板的事件，忽略
       }
@@ -245,7 +254,7 @@ export default {
   },
   beforeUnmount() {
     // 自注销逻辑
-    if (this.autoRegister && this.registrationKey) {
+    if (this.autoRegister && this.effectiveRegistrationKey) {
       this.unregisterFromParent();
     }
 
@@ -259,7 +268,7 @@ export default {
     }
 
     // ⭐ 移除 PanelSingletonManager 事件监听器
-    const panelName = this.registrationKey || this.componentName;
+    const panelName = this.effectiveRegistrationKey;
     if (this._panelStateChangeListener) {
       panelSingletonManager.removeEventListener(panelName, this._panelStateChangeListener);
     }
@@ -286,8 +295,8 @@ export default {
      * 注册到父组件（自注册方法）
      */
     registerToParent() {
-      if (!this.registrationKey) {
-        console.warn('[FunctionPanelUIBase] 缺少 registrationKey，无法自动注册');
+      if (!this.effectiveRegistrationKey) {
+        console.warn('[FunctionPanelUIBase] 缺少 registrationKey 和 componentName，无法自动注册');
         return;
       }
 
@@ -305,14 +314,14 @@ export default {
           ...(instanceConfig?.position || {})
         };
 
-        this.registerPanelInstance(this.registrationKey, {
+        this.registerPanelInstance(this.effectiveRegistrationKey, {
           component: this, // 多实例面板需要传递组件实例
           props: mergedProps,
           visible: true
         }, this.panelInstanceId);
 
         this._registryRegistered = true;
-        console.log(`[FunctionPanelUIBase #${this.instanceId}] ${this.registrationKey} 多实例注册完成`);
+        console.log(`[FunctionPanelUIBase #${this.instanceId}] ${this.effectiveRegistrationKey} 多实例注册完成`);
         return;
       }
 
@@ -331,18 +340,18 @@ export default {
         const visible = instanceConfig ? instanceConfig.visible : true;
 
         // ⭐ 单例面板：不传递组件实例（组件已在预加载时加载）
-        this.registerPanelComponent(this.registrationKey, {
+        this.registerPanelComponent(this.effectiveRegistrationKey, {
           props: mergedProps,
           visible: visible
         });
         this._registryRegistered = true;
-        console.log(`[FunctionPanelUIBase #${this.instanceId}] ${this.registrationKey} 单例注册完成, visible: ${visible}`);
+        console.log(`[FunctionPanelUIBase #${this.instanceId}] ${this.effectiveRegistrationKey} 单例注册完成, visible: ${visible}`);
         return;
       }
 
       // 方式2: 触发自定义事件，通知父组件
       const eventData = {
-        key: this.registrationKey,
+        key: this.effectiveRegistrationKey,
         props: this.$props
       };
 
@@ -360,20 +369,20 @@ export default {
      * 从父组件注销（自注销方法）
      */
     unregisterFromParent() {
-      if (!this.registrationKey) return;
+      if (!this.effectiveRegistrationKey) return;
 
       // 方式1: 通过 inject 的注销方法（优先）
       if (this.unregisterPanelComponent && typeof this.unregisterPanelComponent === 'function') {
-        this.unregisterPanelComponent(this.registrationKey);
-        console.log(`[FunctionPanelUIBase] ${this.registrationKey} 已通过 inject 注销`);
+        this.unregisterPanelComponent(this.effectiveRegistrationKey);
+        console.log(`[FunctionPanelUIBase] ${this.effectiveRegistrationKey} 已通过 inject 注销`);
         return;
       }
 
       // 方式2: 触发自定义事件，通知父组件
       this.$emit('unregister-panel', {
-        key: this.registrationKey
+        key: this.effectiveRegistrationKey
       });
-      console.log(`[FunctionPanelUIBase] ${this.registrationKey} 已通过事件注销`);
+      console.log(`[FunctionPanelUIBase] ${this.effectiveRegistrationKey} 已通过事件注销`);
     },
 
     /**
@@ -575,7 +584,7 @@ export default {
 
       if (isSingleton) {
         // ⭐ 单例模式：假关闭（只隐藏面板）
-        console.log(`[FunctionPanelUIBase] 🔄 面板假关闭（单例模式）: ${this.registrationKey || this.componentName}`);
+        console.log(`[FunctionPanelUIBase] 🔄 面板假关闭（单例模式）: ${this.effectiveRegistrationKey}`);
         this.isClosed = true;
 
         // ⭐ 清理子类状态（包括对话框等）
@@ -584,20 +593,20 @@ export default {
         }
 
         // ⭐ 使用 PanelSingletonManager 更新面板注册表状态（统一使用 updatePanelVisible）
-        panelSingletonManager.updatePanelVisible(this.registrationKey || this.componentName, false);
-        console.log(`[FunctionPanelUIBase] ✅ 已通过 PanelSingletonManager 更新面板 ${this.registrationKey || this.componentName} 可见性为 false`);
+        panelSingletonManager.updatePanelVisible(this.effectiveRegistrationKey, false);
+        console.log(`[FunctionPanelUIBase] ✅ 已通过 PanelSingletonManager 更新面板 ${this.effectiveRegistrationKey} 可见性为 false`);
 
         // ⭐ 更新面板可见性（通过 inject 的 setPanelVisible 方法）
         if (this.setPanelVisible && typeof this.setPanelVisible === 'function') {
-          this.setPanelVisible(this.registrationKey, false);
-          console.log(`[FunctionPanelUIBase] ✅ 已设置面板 ${this.registrationKey} 可见性为 false`);
+          this.setPanelVisible(this.effectiveRegistrationKey, false);
+          console.log(`[FunctionPanelUIBase] ✅ 已设置面板 ${this.effectiveRegistrationKey} 可见性为 false`);
         } else if (this.getRegisteredPanels && typeof this.getRegisteredPanels === 'function') {
           // 回退方案：直接获取 registeredPanels 并更新
           const panels = this.getRegisteredPanels();
-          if (panels && panels[this.registrationKey]) {
+          if (panels && panels[this.effectiveRegistrationKey]) {
             // Vue 3: 直接赋值即可（Proxy 自动处理响应式）
-            panels[this.registrationKey].visible = false;
-            console.log(`[FunctionPanelUIBase] ✅ 已设置面板 ${this.registrationKey} 可见性为 false（直接修改）`);
+            panels[this.effectiveRegistrationKey].visible = false;
+            console.log(`[FunctionPanelUIBase] ✅ 已设置面板 ${this.effectiveRegistrationKey} 可见性为 false（直接修改）`);
           }
         }
 
@@ -606,7 +615,7 @@ export default {
           const fakeCloseEvent = new CustomEvent(`${this.closeEventName}FakeClose`, {
             detail: {
               componentName: this.componentName,
-              registrationKey: this.registrationKey,
+              registrationKey: this.effectiveRegistrationKey,
               preserveData: true
             }
           });
@@ -633,7 +642,7 @@ export default {
         }, 300);
       } else if (isMultiInstance) {
         // ⭐ 多实例面板模式：面板自己注销
-        console.log(`[FunctionPanelUIBase] 🗑️ 多实例面板注销: ${this.registrationKey || this.componentName} #${panelInstanceId}`);
+        console.log(`[FunctionPanelUIBase] 🗑️ 多实例面板注销: ${this.effectiveRegistrationKey} #${panelInstanceId}`);
         this.isClosed = true;
 
         // ⭐ 清理子类状态
@@ -641,26 +650,32 @@ export default {
           this.cleanup();
         }
 
+        // ⭐ 生成正确的 panelKey（格式：registrationKey_panelInstanceId）
+        const panelKey = `${this.effectiveRegistrationKey}_${panelInstanceId}`;
+        console.log(`[FunctionPanelUIBase] 🎯 多实例面板关闭，panelKey: ${panelKey}`);
+
         // ⭐ 面板自己注销：调用 multiInstancePanelConfigManager 注销自己
         if (typeof window !== 'undefined' && window.__multiInstancePanelConfigManager__) {
           const instanceId = this.instanceId || 1;
           window.__multiInstancePanelConfigManager__.unregisterPanelInstance(
             instanceId,
-            this.registrationKey || this.componentName,
+            this.effectiveRegistrationKey,
             panelInstanceId
           );
-          console.log(`[FunctionPanelUIBase] ✅ 面板已自己注销实例: ${this.registrationKey || this.componentName} #${panelInstanceId}`);
+          console.log(`[FunctionPanelUIBase] ✅ 面板已自己注销实例: ${this.effectiveRegistrationKey} #${panelInstanceId}`);
         }
 
         // 等待关闭动画完成
         setTimeout(() => {
-          this.$emit('close', { preserveData: false });
+          // ⭐ 传递正确的 panelKey 给父组件
+          this.$emit('close', { preserveData: false, panelKey: panelKey });
 
           if (typeof window !== 'undefined') {
             const event = new CustomEvent(this.closeEventName, {
               detail: {
                 componentName: this.componentName,
-                panelInstanceId: panelInstanceId
+                panelInstanceId: panelInstanceId,
+                panelKey: panelKey
               }
             });
             window.dispatchEvent(event);
@@ -672,7 +687,7 @@ export default {
         }, 300);
       } else {
         // ⭐ 普通多实例模式：真关闭（销毁组件）
-        console.log(`[FunctionPanelUIBase] ❌ 面板真关闭（多实例模式）: ${this.registrationKey || this.componentName}`);
+        console.log(`[FunctionPanelUIBase] ❌ 面板真关闭（多实例模式）: ${this.effectiveRegistrationKey}`);
         this.isClosed = true;
 
         // 等待关闭动画完成
