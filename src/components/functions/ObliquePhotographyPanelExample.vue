@@ -10,6 +10,8 @@
     close-event-name="obliquePhotographyPanelClose"
     config-id="oblique-photography"
     :panel-name="panelName || 'ObliquePhotographyPanelExample'"
+    :auto-register="autoRegister !== false"
+    :panel-instance-id="panelInstanceId"
     :field-definitions="fieldDefinitions"
     :default-form-values="defaultFormValues"
     :toolbar-buttons="toolbarButtons"
@@ -130,6 +132,15 @@ export default {
     },
     panelName: {
       type: String,
+      default: null
+    },
+    // ⭐ 多实例面板相关 props（必须显式定义以便接收并传递给 JsonConfigPanelBase）
+    autoRegister: {
+      type: Boolean,
+      default: true
+    },
+    panelInstanceId: {
+      type: Number,
       default: null
     }
   },

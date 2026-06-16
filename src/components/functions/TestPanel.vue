@@ -8,8 +8,8 @@
     :initial-y="initialY"
     :allow-minimize="true"
     close-event-name="testPanelClose"
-    :auto-register="true"
-    registration-key="TestPanel"
+    :auto-register="autoRegister !== false"
+    :registration-key="registrationKey || 'TestPanel'"
     @close="handleClose"
     @minimize="handleMinimize"
     @expand="handleExpand"
@@ -76,6 +76,19 @@ export default {
     initialY: {
       type: Number,
       default: 100  // 默认顶部偏移 100px
+    },
+    // ⭐ 多实例面板相关 props（必须显式定义，因为 FunctionPanelUIBase 使用了 Teleport）
+    registrationKey: {
+      type: String,
+      default: null
+    },
+    autoRegister: {
+      type: Boolean,
+      default: true
+    },
+    panelInstanceId: {
+      type: Number,
+      default: null
     }
   },
   data() {

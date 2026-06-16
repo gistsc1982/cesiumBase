@@ -86,7 +86,7 @@
     {
       "name": "ObliquePhotographyPanelExampleMulti",
       "file": "ObliquePhotographyPanelExample.vue",
-      "title": "JsonConfigPanelBase（多实例",
+      "title": "JsonConfigPanelBase（多实例）",
       "description": "JsonConfigPanelBase（多实例）",
       "enabled": true,
       "visible": false,

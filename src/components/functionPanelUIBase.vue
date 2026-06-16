@@ -306,6 +306,21 @@ export default {
 
       // ⭐ 多实例面板：使用 inject 提供的 registerPanelInstance 方法
       if (isMultiInstance && this.registerPanelInstance && typeof this.registerPanelInstance === 'function') {
+        // ⭐ 检查是否已经存在于 MultiInstancePanelConfigManager（防止覆盖手动创建的实例）
+        if (typeof window !== 'undefined' && window.__multiInstancePanelConfigManager__) {
+          const instanceId = this.instanceId || 1;
+          const existingInstance = window.__multiInstancePanelConfigManager__.getPanelInstance(
+            instanceId,
+            this.effectiveRegistrationKey,
+            this.panelInstanceId
+          );
+          if (existingInstance) {
+            console.log(`[FunctionPanelUIBase #${instanceId}] ${this.effectiveRegistrationKey} #${this.panelInstanceId} 实例已存在，跳过重复注册`);
+            this._registryRegistered = true;
+            return;
+          }
+        }
+
         const instanceConfig = this.getInstanceConfig();
 
         // 合并props：实例配置优先，然后是组件自身的props

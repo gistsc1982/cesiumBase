@@ -9,8 +9,9 @@
     :initial-y="initialY"
     :allow-minimize="true"
     :close-event-name="closeEventName"
-    :auto-register="true"
-    :registration-key="panelName"
+    :auto-register="autoRegister !== false"
+    :registration-key="effectivePanelName"
+    :panel-instance-id="panelInstanceId"
     @close="handleClose"
     @minimize="handleMinimize"
     @expand="handleExpand"
@@ -394,6 +395,16 @@ export default {
       default: 'JsonConfigPanel'
     },
 
+    // ⭐ 多实例面板相关 props（必须显式定义，因为 FunctionPanelUIBase 使用了 Teleport）
+    autoRegister: {
+      type: Boolean,
+      default: true
+    },
+    panelInstanceId: {
+      type: Number,
+      default: null
+    },
+
     // 字段定义
     fieldDefinitions: {
       type: Array,
@@ -475,16 +486,16 @@ export default {
   },
 
   mounted() {
-    const savedState = panelSingletonManager.getPanelState(this.panelName);
+    const savedState = panelSingletonManager.getPanelState(this.effectivePanelName);
     const hasCesiumObjects = savedState && savedState.cesiumObjects;
 
     if (hasCesiumObjects) {
-      console.log(`[${this.panelName}] 📦 恢复保存的 Cesium 对象`);
+      console.log(`[${this.effectivePanelName}] 📦 恢复保存的 Cesium 对象`);
       this.restoreCesiumObjects(savedState.cesiumObjects);
     }
 
     this.initCesium(() => {
-      console.log(`[${this.panelName}] Cesium 已就绪，开始加载配置`);
+      console.log(`[${this.effectivePanelName}] Cesium 已就绪，开始加载配置`);
       this.loadConfig();
     });
   },
@@ -492,15 +503,26 @@ export default {
   beforeUnmount() {
     const cesiumObjects = this.getCesiumObjects();
     if (cesiumObjects) {
-      panelSingletonManager.savePanelState(this.panelName, {
+      panelSingletonManager.savePanelState(this.effectivePanelName, {
         cesiumObjects: cesiumObjects,
         configList: []
       });
-      console.log(`[${this.panelName}] 💾 Cesium 对象已保存`);
+      console.log(`[${this.effectivePanelName}] 💾 Cesium 对象已保存`);
     }
   },
 
   computed: {
+    /**
+     * ⭐ 有效的面板名称（用于 PanelSingletonManager）
+     * 对于多实例面板，使用 panelName_panelInstanceId 格式
+     * 对于单例面板，直接使用 panelName
+     */
+    effectivePanelName() {
+      if (this.panelInstanceId !== null) {
+        return `${this.panelName}_${this.panelInstanceId}`;
+      }
+      return this.panelName;
+    },
     currentDirectoryFiles() {
       if (!this.currentServerDirectory) {
         return this.serverFiles;
