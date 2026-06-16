@@ -236,8 +236,17 @@ export default {
         return; // 不是当前面板的事件，忽略
       }
       console.log(`[FunctionPanelUIBase] 🔔 监听到 PanelSingletonManager 事件: ${targetPanelName}`, eventData);
-      if (eventData.type === 'visibleChange' && this.isClosed !== eventData.isClosed) {
+      if (eventData.type === 'visibleChange') {
+        // ⭐ 强制更新 isClosed 状态，不进行条件检查
+        const oldIsClosed = this.isClosed;
         this.isClosed = eventData.isClosed;
+        console.log(`[FunctionPanelUIBase] 🔄 更新 isClosed 状态: ${oldIsClosed} -> ${this.isClosed}`);
+
+        // ⭐ 如果面板从关闭变为打开，强制 Vue 更新
+        if (oldIsClosed && !this.isClosed) {
+          this.$forceUpdate();
+          console.log(`[FunctionPanelUIBase] ✅ 强制重新渲染面板: ${targetPanelName}`);
+        }
       }
     };
     panelSingletonManager.addEventListener(panelName, this._panelStateChangeListener);

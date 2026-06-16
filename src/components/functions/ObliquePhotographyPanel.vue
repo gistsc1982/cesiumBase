@@ -1,6 +1,7 @@
 <template>
   <!-- 主面板 -->
   <FunctionPanelUIBase
+    ref="basePanel"
     title="倾斜摄影加载"
     title-icon="📷"
     :width="420"
@@ -546,6 +547,29 @@ export default {
     }
   },
   mounted() {
+    // ⭐ 注册面板状态变化监听器（单例面板需要持续同步状态）
+    this._panelStateChangeListener = (eventData) => {
+      if (eventData.type === 'visibleChange') {
+        // ⭐ 通过 $refs 访问 FunctionPanelUIBase 的 isClosed 状态
+        const basePanel = this.$refs.basePanel || this.$children[0];
+        if (basePanel) {
+          const oldIsClosed = basePanel.isClosed;
+          basePanel.isClosed = eventData.isClosed;
+          console.log(`[${this.componentName}] 🔔 监听到状态变化: isClosed ${oldIsClosed} -> ${basePanel.isClosed}`);
+
+          // ⭐ 如果面板从关闭变为打开，强制 Vue 更新
+          if (oldIsClosed && !basePanel.isClosed) {
+            basePanel.$forceUpdate();
+            console.log(`[${this.componentName}] ✅ 强制重新渲染 FunctionPanelUIBase`);
+          }
+        } else {
+          console.warn(`[${this.componentName}] ⚠️ 无法找到 FunctionPanelUIBase 实例`);
+        }
+      }
+    };
+    panelSingletonManager.addEventListener(this.componentName, this._panelStateChangeListener);
+    console.log(`[${this.componentName}] 📝 已注册面板状态监听器`);
+
     // ⭐ 单例模式：检查是否有保存的 Cesium 对象状态
     const savedState = panelSingletonManager.getPanelState(this.componentName);
     const hasCesiumObjects = savedState && savedState.cesiumTilesets && savedState.cesiumTilesets.size > 0;

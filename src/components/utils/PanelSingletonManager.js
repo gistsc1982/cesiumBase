@@ -335,6 +335,19 @@ class PanelSingletonManager {
       }
       console.log(`[PanelSingletonManager] 🔄 更新面板可见性: ${panelName} = ${visible}, isClosed = ${panel.isClosed}`);
 
+      // ⭐ 直接更新面板组件实例的 isClosed 状态（绕过事件机制）
+      if (panel.component && typeof panel.component === 'object') {
+        const oldIsClosed = panel.component.isClosed;
+        panel.component.isClosed = panel.isClosed;
+        console.log(`[PanelSingletonManager] 🔧 直接更新组件 isClosed: ${oldIsClosed} -> ${panel.component.isClosed}`);
+
+        // ⭐ 强制 Vue 重新渲染组件
+        if (panel.component.$forceUpdate && typeof panel.component.$forceUpdate === 'function') {
+          panel.component.$forceUpdate();
+          console.log(`[PanelSingletonManager] ✅ 强制重新渲染面板组件: ${panelName}`);
+        }
+      }
+
       // ⭐ 触发面板状态变化事件（通知组件同步状态）
       this.emitEvent(panelName, {
         type: 'visibleChange',
