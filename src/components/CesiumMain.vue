@@ -1179,10 +1179,19 @@ export default {
           console.log(`[CesiumMain #${instanceId}] ⏭️ 面板 ${key} 已存在，跳过重复注册`);
           return;
         }
-        // 如果配置有变化，只更新需要更新的字段
+        // ⭐ 如果配置有变化，只更新需要更新的字段
+        // 但如果面板已经存在，优先保留用户通过工具栏按钮设置的状态
         console.log(`[CesiumMain #${instanceId}] 🔄 面板 ${key} 配置已变化，更新配置`);
         if (existingPanel.visible !== config.visible) {
-          panelSingletonManager.updatePanelVisible(key, config.visible);
+          // ⭐ 只有当面板当前是隐藏状态时，才使用 config.visible
+          // 如果面板已经显示（用户通过工具栏按钮设置），则保持显示状态
+          if (!existingPanel.visible && config.visible) {
+            panelSingletonManager.updatePanelVisible(key, config.visible);
+          } else if (existingPanel.visible && !config.visible) {
+            // 面板显示但配置要求隐藏 - 这可能是组件关闭后重新注册的情况
+            // 保持现有状态不改变
+            console.log(`[CesiumMain #${instanceId}] ⏭️ 面板 ${key} 已显示，保持显示状态`);
+          }
         }
       }
 
@@ -1197,7 +1206,10 @@ export default {
           ...(config.props || {})
         };
 
-        const mergedVisible = instancePanelConfig ? instancePanelConfig.visible : (config.visible !== false);
+        // ⭐ 优先使用 PanelSingletonManager 中的当前状态，而不是配置文件的初始状态
+        // 这样可以保持用户通过工具栏按钮设置的状态
+        const currentPanelState = panelSingletonManager.getPanel(key);
+        const mergedVisible = currentPanelState?.visible ?? (instancePanelConfig ? instancePanelConfig.visible : (config.visible !== false));
 
         // ⭐ 获取组件定义（如果 config.component 不存在，从缓存中获取）
         const component = config.component || this.functionPanelComponents[key];
