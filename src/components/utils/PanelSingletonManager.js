@@ -489,17 +489,23 @@ class PanelSingletonManager {
       return;
     }
 
-    // 更新容器显示状态
-    const oldDisplay = container.style.display;
-    container.style.display = visible ? 'block' : 'none';
+    // ⭐ 使用 CSS 类来控制显示状态（更可靠，防止 Vue 响应式系统覆盖）
+    const oldHiddenState = container.classList.contains('hidden');
+    if (visible) {
+      container.classList.remove('hidden');
+    } else {
+      container.classList.add('hidden');
+    }
+
+    // 更新状态
     containerConfig.visible = visible;
     containerConfig.isClosed = !visible;
 
-    console.log(`[PanelSingletonManager] 🔄 更新 mjs 容器可见性: ${panelName}, visible: ${visible}, display: ${oldDisplay} -> ${container.style.display}, container:`, container);
+    console.log(`[PanelSingletonManager] 🔄 更新 mjs 容器可见性: ${panelName}, visible: ${visible}, hidden: ${oldHiddenState} -> ${container.classList.contains('hidden')}, container:`, container);
 
     // 验证更新是否成功
-    if (visible && container.style.display === 'none') {
-      console.error(`[PanelSingletonManager] ❌ 尝试显示容器但 display 仍为 none: ${panelName}`);
+    if (visible && container.classList.contains('hidden')) {
+      console.error(`[PanelSingletonManager] ❌ 尝试显示容器但仍有 hidden 类: ${panelName}`);
     }
   }
 

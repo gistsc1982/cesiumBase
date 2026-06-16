@@ -899,12 +899,12 @@ export default {
             isClosed: config.visible === false
           });
 
-          // ⭐ 如果配置中可见，立即显示容器
+          // ⭐ 如果配置中可见，确保容器没有 hidden 类
           if (config.visible !== false) {
             const container = document.getElementById(containerId);
             if (container) {
-              container.style.display = 'block';
-              console.log(`[CesiumMain] ✅ 设置 mjs 容器可见: ${config.name} (${containerId})`);
+              container.classList.remove('hidden');
+              console.log(`[CesiumMain] ✅ 移除 hidden 类，设置 mjs 容器可见: ${config.name} (${containerId})`);
             }
           }
 
@@ -1371,6 +1371,27 @@ export default {
       // ⭐ 多实例模式：每次点击都创建新实例
       if (!singleton && visible) {
         console.log(`[CesiumMain] 🧬 多实例模式：创建新面板实例 - ${panelId}`);
+
+        // ⭐ 在创建多实例之前，先隐藏对应的单例面板（如果存在）
+        const panelConfig = getPanelConfig(panelId);
+        if (panelConfig?.singletonContainerId) {
+          const singletonPanelName = this.findSingletonPanelByContainerId(panelConfig.singletonContainerId);
+          console.log(`[CesiumMain] 🔍 查找单例面板: ${singletonPanelName}`);
+
+          if (singletonPanelName) {
+            // 更新 PanelSingletonManager 中的状态
+            panelSingletonManager.updatePanelVisible(singletonPanelName, false);
+            console.log(`[CesiumMain] 🔄 已隐藏单例面板: ${singletonPanelName}`);
+
+            // ⭐ 使用 CSS 类来隐藏容器（更可靠，防止 Vue 响应式系统覆盖）
+            const singletonContainer = document.getElementById(panelConfig.singletonContainerId);
+            if (singletonContainer) {
+              singletonContainer.classList.add('hidden');
+              console.log(`[CesiumMain] 🙈 已添加 hidden 类到单例容器: ${panelConfig.singletonContainerId}`);
+            }
+          }
+        }
+
         this.createMultiInstancePanel(panelId);
         return;
       }
@@ -1460,21 +1481,87 @@ export default {
      * @param {Object} panelConfig - 面板配置
      */
     async createMjsMultiInstance(panelId, panelConfig) {
+      console.log(`[CesiumMain] 🧬 开始创建多实例面板: ${panelId}`, {
+        singletonContainerId: panelConfig.singletonContainerId,
+        hasConfig: !!panelConfig
+      });
+
       // ⭐ 隐藏单例容器（如果配置了 singletonContainerId）
       // 不删除容器，只是隐藏，这样单例模式可以重新显示
       if (panelConfig.singletonContainerId) {
         const singletonContainer = document.getElementById(panelConfig.singletonContainerId);
+        console.log(`[CesiumMain] 🔍 查找单例容器: ${panelConfig.singletonContainerId}`, {
+          found: !!singletonContainer,
+          currentDisplay: singletonContainer ? singletonContainer.style.display : 'N/A'
+        });
+
         if (singletonContainer) {
           console.log(`[CesiumMain] 🙈 隐藏单例容器: ${panelConfig.singletonContainerId}`);
-          singletonContainer.style.display = 'none';
+
+          // ⭐ 使用 querySelectorAll 确保隐藏所有相同 ID 的容器（处理 DOM 中的重复 ID）
+          const allSingletonContainers = document.querySelectorAll(`#${panelConfig.singletonContainerId}`);
+          console.log(`[CesiumMain] 🔍 找到 ${allSingletonContainers.length} 个 ID 为 ${panelConfig.singletonContainerId} 的容器`);
+
+          allSingletonContainers.forEach((container, index) => {
+            // ⭐ 使用 CSS 类来隐藏容器（更可靠，防止 Vue 响应式系统覆盖）
+            container.classList.add('hidden');
+            console.log(`[CesiumMain] 🙈 已添加 hidden 类到容器 ${index + 1}/${allSingletonContainers.length}`);
+          });
+
+          // 验证隐藏是否成功
+          setTimeout(() => {
+            const computedStyle = window.getComputedStyle(singletonContainer);
+            const actualDisplay = computedStyle.display;
+            const rect = singletonContainer.getBoundingClientRect();
+
+            // 检查所有可能的 dualCanvas 容器
+            const allDualCanvasContainers = document.querySelectorAll('[id*="dualCanvas"], [class*="dual-canvas"]');
+
+            console.log(`[CesiumMain] 🔍 查找所有相关容器 (总数: ${allDualCanvasContainers.length}):`);
+            Array.from(allDualCanvasContainers).forEach((el, index) => {
+              const style = window.getComputedStyle(el);
+              const elRect = el.getBoundingClientRect();
+              console.log(`  [${index + 1}] ID: ${el.id || '(无)'}, Class: ${el.className || '(无)'}, Display: ${style.display}, 可见: ${style.display !== 'none' && elRect.width > 0}, 尺寸: ${elRect.width}x${elRect.height}`);
+            });
+
+            console.log(`[CesiumMain] 🔍 验证隐藏结果: ${panelConfig.singletonContainerId}`, {
+              inlineStyle: singletonContainer.style.display,
+              computedStyle: actualDisplay,
+              isHidden: actualDisplay === 'none',
+              rect: {
+                width: rect.width,
+                height: rect.height,
+                top: rect.top,
+                left: rect.left
+              },
+              childrenCount: singletonContainer.children.length,
+              hasContent: singletonContainer.children.length > 0
+            });
+
+            if (actualDisplay !== 'none') {
+              console.error(`[CesiumMain] ❌ 隐藏失败！容器仍然可见: ${panelConfig.singletonContainerId}, display: ${actualDisplay}`);
+            } else if (rect.width > 0 || rect.height > 0) {
+              console.warn(`[CesiumMain] ⚠️ 容器 display 为 none 但仍有尺寸: ${panelConfig.singletonContainerId}`, rect);
+            }
+          }, 100);
 
           // 同步更新 PanelSingletonManager 中的可见性状态
           // 查找使用此容器的单例面板
           const singletonPanelName = this.findSingletonPanelByContainerId(panelConfig.singletonContainerId);
+          console.log(`[CesiumMain] 🔍 查找单例面板: ${singletonPanelName}`, {
+            found: !!singletonPanelName,
+            hasPanel: singletonPanelName ? panelSingletonManager.hasPanel(singletonPanelName) : false
+          });
+
           if (singletonPanelName && panelSingletonManager.hasPanel(singletonPanelName)) {
+            console.log(`[CesiumMain] 🔄 更新单例面板可见性: ${singletonPanelName} = false`);
             panelSingletonManager.updatePanelVisible(singletonPanelName, false);
           }
+        } else {
+          console.warn(`[CesiumMain] ⚠️ 单例容器未找到: ${panelConfig.singletonContainerId}`);
         }
+      } else {
+        console.log(`[CesiumMain] ℹ️ 面板配置中没有 singletonContainerId`);
       }
 
       // 生成面板实例ID
@@ -1675,11 +1762,12 @@ export default {
             // 检查单例面板是否应该是可见的
             const singletonPanel = panelSingletonManager.getPanel(singletonPanelName);
             if (singletonPanel && singletonPanel.visible) {
-              const singletonContainer = document.getElementById(panelConfig.singletonContainerId);
-              if (singletonContainer) {
-                console.log(`[CesiumMain] 🔄 恢复单例容器显示: ${panelConfig.singletonContainerId}`);
-                singletonContainer.style.display = 'block';
-              }
+              // ⭐ 使用 querySelectorAll 确保恢复所有相同 ID 的容器
+              const allSingletonContainers = document.querySelectorAll(`#${panelConfig.singletonContainerId}`);
+              allSingletonContainers.forEach((container) => {
+                container.classList.remove('hidden');
+                console.log(`[CesiumMain] 🔄 已移除 hidden 类，恢复单例容器显示: ${panelConfig.singletonContainerId}`);
+              });
             }
           }
         }
@@ -9926,5 +10014,14 @@ body,
   pointer-events: auto !important;
   background: transparent !important;
   background-color: transparent !important;
+}
+
+/* ⭐ 隐藏状态 - 使用 !important 确保优先级最高（必须在全局样式中） */
+#dualCanvasContainer.dual-canvas-overlay.hidden,
+.dual-canvas-overlay.hidden {
+  display: none !important;
+  visibility: hidden !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
 }
 </style>
