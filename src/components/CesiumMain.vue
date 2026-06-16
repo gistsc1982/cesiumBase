@@ -1322,10 +1322,38 @@ export default {
         const panelInstanceId = parseInt(parts[parts.length - 1]);
         const panelName = parts.slice(0, -1).join('_');
 
-        // 注销动态面板实例
+        console.log(`[CesiumMain] 🧬 多实例面板关闭: ${panelName} #${panelInstanceId}`);
+
+        // ⭐ 多实例面板：注销动态面板实例
         const instanceId = this.instanceId || 1;
         multiInstancePanelConfigManager.unregisterPanelInstance(instanceId, panelName, panelInstanceId);
         console.log(`[CesiumMain] 🗑️ 动态面板实例已注销: ${panelKey}`);
+
+        // ⭐ 多实例面板：不应该更新 PanelSingletonManager（每个实例独立管理）
+        // 触发响应式更新
+        this._panelsRefreshCounter++;
+        return;
+      }
+
+      // ⭐ 检查是否为多实例面板名称（在配置中 singleton: false）
+      const panelConfig = getPanelConfig(panelKey);
+      if (panelConfig && panelConfig.singleton === false) {
+        console.log(`[CesiumMain] ⚠️ 多实例面板使用单例面板关闭逻辑: ${panelKey}`);
+        // ⭐ 多实例面板应该通过实例ID区分，不应该直接使用面板名称
+        // 这里是兜底逻辑：尝试从 multiInstancePanelConfigManager 中注销所有同名实例
+        const instanceId = this.instanceId || 1;
+        const allInstances = multiInstancePanelConfigManager.getAllPanelInstances(instanceId)
+          .filter(p => p.panelName === panelKey);
+
+        console.log(`[CesiumMain] 🗑️ 注销所有同名多实例面板: ${panelKey}, 共 ${allInstances.length} 个`);
+        allInstances.forEach(instance => {
+          multiInstancePanelConfigManager.unregisterPanelInstance(
+            instanceId,
+            instance.panelName,
+            instance.panelInstanceId
+          );
+        });
+
         // 触发响应式更新
         this._panelsRefreshCounter++;
         return;
@@ -1722,7 +1750,7 @@ export default {
             initialY: 80 + offsetY,
             panelInstanceId: panelInstanceId,
             registrationKey: panelId,
-            autoRegister: true
+            autoRegister: false
           },
           visible: true
         },

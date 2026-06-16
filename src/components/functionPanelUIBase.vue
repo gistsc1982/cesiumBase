@@ -596,14 +596,16 @@ export default {
      * ⭐ 面板自己管理关闭状态判断和验证注销
      */
     close() {
-      // ⭐ 自动判断是否为单例模式
-      // 单例模式：通过 functionPanels.config.json 配置自动加载
-      // 判断依据：autoRegister === true 且有 registrationKey
-      const isSingleton = this.autoRegister && this.registrationKey;
-
-      // ⭐ 检查是否为多实例面板实例
+      // ⭐ 优先检查是否为多实例面板
       // 多实例面板有 panelInstanceId（从 props 或 inject 获取）
       const panelInstanceId = this.panelInstanceId || null;
+
+      // ⭐ 自动判断是否为单例模式
+      // 单例模式：通过 functionPanels.config.json 配置自动加载 且 不是多实例
+      // 判断依据：autoRegister === true 且有 registrationKey 且没有 panelInstanceId
+      const isSingleton = this.autoRegister && this.registrationKey && !panelInstanceId;
+
+      // ⭐ 检查是否为多实例面板实例
       const isMultiInstance = !isSingleton && panelInstanceId !== null;
 
       if (isSingleton) {
@@ -714,13 +716,32 @@ export default {
         console.log(`[FunctionPanelUIBase] ❌ 面板真关闭（多实例模式）: ${this.effectiveRegistrationKey}`);
         this.isClosed = true;
 
+        // ⭐ 清理子类状态
+        if (this.cleanup && typeof this.cleanup === 'function') {
+          this.cleanup();
+        }
+
+        // ⭐ 生成 panelKey（如果没有 panelInstanceId，则使用 effectiveRegistrationKey）
+        // 注意：这种情况下，关闭操作会影响到所有同名面板实例
+        const panelInstanceId = this.panelInstanceId;
+        const panelKey = panelInstanceId !== null
+          ? `${this.effectiveRegistrationKey}_${panelInstanceId}`
+          : this.effectiveRegistrationKey;
+
+        console.log(`[FunctionPanelUIBase] 🎯 多实例面板关闭，panelKey: ${panelKey}, panelInstanceId: ${panelInstanceId}`);
+
         // 等待关闭动画完成
         setTimeout(() => {
-          this.$emit('close', { preserveData: false });
+          // ⭐ 传递正确的 panelKey 给父组件
+          this.$emit('close', { preserveData: false, panelKey: panelKey });
 
           if (typeof window !== 'undefined') {
             const event = new CustomEvent(this.closeEventName, {
-              detail: { componentName: this.componentName }
+              detail: {
+                componentName: this.componentName,
+                panelInstanceId: panelInstanceId,
+                panelKey: panelKey
+              }
             });
             window.dispatchEvent(event);
           }
