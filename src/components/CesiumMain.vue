@@ -244,12 +244,24 @@
 
 <script>
 // import CesiumNavigation from "cesium-navigation-es6/viewerCesiumNavigationMixin"; // 临时注释掉以解决编译错误
-import * as THREE from 'three';
+// ⭐ 移除 Three.js 的直接导入，避免重复加载
+// 改为使用全局 window.THREE（由 load-three-globals.js 加载）
+// import * as THREE from 'three';
 // ⭐ 使用 dual-canvas-viewer-plugin.iife.js 新暴露的工具类
 // import { CesiumLayerRegister } from '../utils/CesiumLayerAdapter.js';
 // import { HeightAlignmentManager } from '../utils/HeightAlignmentManager.js';
 // import TiandituTerrainProvider from '../utils/TiandituTerrainProvider.js'; // ⚠️ 文件已删除，暂时注释
 import CesiumToolbar from './CesiumToolbar.vue';
+
+// ⭐ 辅助函数：安全获取全局 THREE
+// 等待 load-three-globals.js 加载完成
+function getTHREE() {
+  if (!window.THREE) {
+    console.warn('[CesiumMain] ⚠️ window.THREE 尚未加载，请确保 load-three-globals.js 已执行');
+    return null;
+  }
+  return window.THREE;
+}
 
 // ⭐ Vue 3 工具
 import { markRaw } from 'vue';
@@ -466,6 +478,8 @@ async function loadMjsComponent(componentName, panelConfig) {
 async function loadMjsMultiInstance(componentName, panelConfig) {
   const { loadModule } = window['vue3-sfc-loader'];
   const Vue = await import('vue');
+
+  // ⭐ DualCanvasViewer.mjs 内部已打包 Three.js，无需等待全局模块
 
   // 解析 .mjs 文件路径
   const componentPath = await resolveMjsResourcePath(panelConfig.file);
@@ -2937,7 +2951,8 @@ export default {
           moduleCache: {
             // ⭐ 传递完整的 Vue 对象（不是解构的函数）
             vue: Vue,
-            three: THREE,
+            // ⭐ DualCanvasViewer.mjs 内部已打包 Three.js，不需要提供
+            // 移除 'three' 配置以避免多实例警告
             // ⭐ Three.js addons 从全局 window 获取（如果可用）
             // 使用函数包装器创建正确的模块结构，避免 vue3-sfc-loader 命名空间导入问题
             'three/addons/controls/OrbitControls.js': (typeof window !== 'undefined' && window.OrbitControls) ?
@@ -3525,17 +3540,17 @@ export default {
 
         await loadCSS(cssUrl);
 
-        // 动态导入 Three.js 相关模块
-        const THREE = await import('three');
-        const { OrbitControls } = await import('three/examples/jsm/controls/OrbitControls.js');
-        const { GLTFLoader } = await import('three/examples/jsm/loaders/GLTFLoader.js');
-        const { DRACOLoader } = await import('three/examples/jsm/loaders/DRACOLoader.js');
+        // ⭐ 使用全局 window 中的 Three.js 模块，避免重复加载
+        const THREE = window.THREE;
+        const OrbitControls = window.OrbitControls;
+        const GLTFLoader = window.GLTFLoader;
+        const DRACOLoader = window.DRACOLoader;
 
         // vue3-sfc-loader 配置（支持 ESM 模块）
         const options = {
           moduleCache: {
             vue: Vue,
-            'three': THREE.default || THREE,  // 使用 default 导入以避免多实例
+            'three': THREE || {},  // 使用全局 THREE
             'three/examples/jsm/controls/OrbitControls.js': { OrbitControls },
             'three/examples/jsm/loaders/GLTFLoader.js': { GLTFLoader },
             'three/examples/jsm/loaders/DRACOLoader.js': { DRACOLoader }
@@ -3680,17 +3695,17 @@ async loadTestSfcComponent(instanceId) {
 
         await loadCSS(cssUrl);
 
-        // 动态导入 Three.js 相关模块
-        const THREE = await import('three');
-        const { OrbitControls } = await import('three/examples/jsm/controls/OrbitControls.js');
-        const { GLTFLoader } = await import('three/examples/jsm/loaders/GLTFLoader.js');
-        const { DRACOLoader } = await import('three/examples/jsm/loaders/DRACOLoader.js');
+        // ⭐ 使用全局 window 中的 Three.js 模块，避免重复加载
+        const THREE = window.THREE;
+        const OrbitControls = window.OrbitControls;
+        const GLTFLoader = window.GLTFLoader;
+        const DRACOLoader = window.DRACOLoader;
 
         // vue3-sfc-loader 配置（支持 ESM 模块）
         const options = {
           moduleCache: {
             vue: Vue,
-            'three': THREE.default || THREE,  // 使用 default 导入以避免多实例
+            'three': THREE || {},  // 使用全局 THREE
             'three/examples/jsm/controls/OrbitControls.js': { OrbitControls },
             'three/examples/jsm/loaders/GLTFLoader.js': { GLTFLoader },
             'three/examples/jsm/loaders/DRACOLoader.js': { DRACOLoader }
@@ -4598,14 +4613,14 @@ async loadTestSfcComponent(instanceId) {
           );
 
           // 计算方向向量
-          const direction = new THREE.Vector3(
+          const direction = new window.THREE.Vector3(
             threeTargetPosition.x - threeCameraPosition.x,
             threeTargetPosition.y - threeCameraPosition.y,
             threeTargetPosition.z - threeCameraPosition.z
           );
           direction.normalize();
 
-          const dummyCamera = new THREE.Camera();
+          const dummyCamera = new window.THREE.Camera();
           dummyCamera.position.set(0, 0, 0);
           dummyCamera.up.copy(dualViewer.camera1.up);
           dummyCamera.lookAt(direction.x, direction.y, direction.z);
@@ -4729,7 +4744,7 @@ async loadTestSfcComponent(instanceId) {
       // 只有在全局墨卡托坐标系模式下，才需要旋转场景容器来对齐地板
       if (useLocalCoordSystem) {
         // 局部坐标系模式：确保场景容器保持 identity 旋转
-        if (sceneContainerBefore && !sceneContainerBefore.quaternion.equals(new THREE.Quaternion(0, 0, 0, 1))) {
+        if (sceneContainerBefore && !sceneContainerBefore.quaternion.equals(new window.THREE.Quaternion(0, 0, 0, 1))) {
           sceneContainerBefore.quaternion.set(0, 0, 0, 1);
           console.log('[HelloWorld.syncToThreeJSFromUnified] ⭐ 局部坐标系模式：重置场景容器旋转为 identity');
         }
@@ -4738,31 +4753,31 @@ async loadTestSfcComponent(instanceId) {
         console.log('[HelloWorld.syncToThreeJSFromUnified] ⭐ 全局坐标系模式：地板与地面叠合，应用 Cesium 旋转到场景容器');
 
         // 从 Cesium 获取相机方向（已经在 threeState 中转换为 Three.js 坐标系）
-        const position = new THREE.Vector3(
+        const position = new window.THREE.Vector3(
           threeState.position.x,
           threeState.position.y,
           threeState.position.z
         );
 
-        const target = new THREE.Vector3(
+        const target = new window.THREE.Vector3(
           threeState.target.x,
           threeState.target.y,
           threeState.target.z
         );
 
         // 计算相机的方向向量
-        const direction = new THREE.Vector3().subVectors(target, position).normalize();
+        const direction = new window.THREE.Vector3().subVectors(target, position).normalize();
 
         // 获取 up 向量
         let up;
         if (threeState.up && typeof threeState.up.x === 'number') {
-          up = new THREE.Vector3(threeState.up.x, threeState.up.y, threeState.up.z);
+          up = new window.THREE.Vector3(threeState.up.x, threeState.up.y, threeState.up.z);
         } else {
-          up = new THREE.Vector3(0, 1, 0);
+          up = new window.THREE.Vector3(0, 1, 0);
         }
 
         // 创建相机的四元数（代表 Cesium 的旋转）
-        const dummyCamera = new THREE.Camera();
+        const dummyCamera = new window.THREE.Camera();
         dummyCamera.position.set(0, 0, 0);
         dummyCamera.up.copy(up);
         dummyCamera.lookAt(direction.x, direction.y, direction.z);
@@ -4783,7 +4798,7 @@ async loadTestSfcComponent(instanceId) {
       } else if (sceneContainerBefore) {
         // ⭐ 其他情况（全局坐标系模式 + 地板高度 > 1 米）：重置场景容器旋转为 identity
         // 这样地板不会旋转，只有相机在移动
-        if (!sceneContainerBefore.quaternion.equals(new THREE.Quaternion(0, 0, 0, 1))) {
+        if (!sceneContainerBefore.quaternion.equals(new window.THREE.Quaternion(0, 0, 0, 1))) {
           sceneContainerBefore.quaternion.set(0, 0, 0, 1);
           console.log('[HelloWorld.syncToThreeJSFromUnified] ⭐ 全局坐标系模式：地板高度 > 1 米，重置场景容器旋转为 identity');
         }
@@ -4792,20 +4807,20 @@ async loadTestSfcComponent(instanceId) {
       // 更新相机位置
       if (dualViewer.camera1) {
         // 创建向量
-        const position = new THREE.Vector3(
+        const position = new window.THREE.Vector3(
           threeState.position.x,
           threeState.position.y,
           threeState.position.z
         );
 
-        const target = new THREE.Vector3(
+        const target = new window.THREE.Vector3(
           threeState.target.x,
           threeState.target.y,
           threeState.target.z
         );
 
         // 计算方向向量
-        const direction = new THREE.Vector3().subVectors(target, position).normalize();
+        const direction = new window.THREE.Vector3().subVectors(target, position).normalize();
 
         // ⭐ 关键修复：检查是否是局部坐标系模式
         // 在局部坐标系模式下，Three.js 场景使用局部坐标系，相机的 up 应该是 (0, 1, 0)
@@ -4817,11 +4832,11 @@ async loadTestSfcComponent(instanceId) {
         let up;
         if (useLocalCoordSystem) {
           // ⭐ 局部坐标系模式：使用 (0, 1, 0) 作为 up 向量（Three.js 局部坐标系的 Y 轴）
-          up = new THREE.Vector3(0, 1, 0);
+          up = new window.THREE.Vector3(0, 1, 0);
           console.log('[HelloWorld.syncToThreeJSFromUnified] 局部坐标系模式：使用 (0, 1, 0) 作为 up 向量');
         } else if (threeState.up && typeof threeState.up.x === 'number') {
           // ⭐ 全局墨卡托坐标系模式：使用统一坐标系提供的 up 向量
-          up = new THREE.Vector3(threeState.up.x, threeState.up.y, threeState.up.z);
+          up = new window.THREE.Vector3(threeState.up.x, threeState.up.y, threeState.up.z);
           console.log('[HelloWorld.syncToThreeJSFromUnified] 全局坐标系模式：使用统一坐标系 up 向量:', {
             up: `(${up.x.toFixed(4)}, ${up.y.toFixed(4)}, ${up.z.toFixed(4)})`
           });
@@ -4830,9 +4845,9 @@ async loadTestSfcComponent(instanceId) {
           const dotY = Math.abs(direction.y);
           if (dotY > 0.985) {
             const upZ = direction.y < 0 ? -1 : 1;
-            up = new THREE.Vector3(0, 0, upZ);
+            up = new window.THREE.Vector3(0, 0, upZ);
           } else {
-            up = new THREE.Vector3(0, 1, 0);
+            up = new window.THREE.Vector3(0, 1, 0);
           }
         }
 
@@ -4842,7 +4857,7 @@ async loadTestSfcComponent(instanceId) {
 
         // 关键修复：不使用 lookAt()，因为会重新计算 up 向量
         // 使用已计算的 direction 变量来设置相机朝向
-        const dummyCamera = new THREE.Camera();
+        const dummyCamera = new window.THREE.Camera();
         dummyCamera.position.set(0, 0, 0);
         dummyCamera.up.copy(up); // 使用传入的 up
         dummyCamera.lookAt(direction.x, direction.y, direction.z);
@@ -5093,7 +5108,7 @@ async loadTestSfcComponent(instanceId) {
             const camera = this.cesiumViewer.camera;
             const currentPosition = this.Cesium.Cartesian3.clone(camera.position);
 
-            const dualDirection = new THREE.Vector3();
+            const dualDirection = new window.THREE.Vector3();
             dualViewer.camera1.getWorldDirection(dualDirection);
             dualDirection.normalize();
 
@@ -5368,14 +5383,14 @@ async loadTestSfcComponent(instanceId) {
         const rotationY = deltaY * rotateSpeed; // 绕 Y 轴旋转（偏航）
 
         // 创建旋转四元数
-        const quatX = new THREE.Quaternion();
-        quatX.setFromAxisAngle(new THREE.Vector3(1, 0, 0), rotationX);
+        const quatX = new window.THREE.Quaternion();
+        quatX.setFromAxisAngle(new window.THREE.Vector3(1, 0, 0), rotationX);
 
-        const quatY = new THREE.Quaternion();
-        quatY.setFromAxisAngle(new THREE.Vector3(0, 1, 0), -rotationY); // 注意：Y轴旋转方向相反
+        const quatY = new window.THREE.Quaternion();
+        quatY.setFromAxisAngle(new window.THREE.Vector3(0, 1, 0), -rotationY); // 注意：Y轴旋转方向相反
 
         // 组合旋转（四元数乘法顺序很重要）
-        const combinedRotation = new THREE.Quaternion();
+        const combinedRotation = new window.THREE.Quaternion();
         combinedRotation.multiplyQuaternions(quatY, quatX, combinedRotation);
 
         // 应用旋转到 Three.js 场景容器
@@ -6305,7 +6320,7 @@ async loadTestSfcComponent(instanceId) {
       const spheres = [];
       scene.traverse((obj) => {
         if (obj.isMesh && obj.geometry && obj.geometry.type === 'SphereGeometry') {
-          const worldPos = new THREE.Vector3();
+          const worldPos = new window.THREE.Vector3();
           obj.getWorldPosition(worldPos);
           spheres.push({
             name: obj.name || 'unnamed',
@@ -6402,7 +6417,7 @@ async loadTestSfcComponent(instanceId) {
           // Cesium: heading(yaw), pitch, roll
           // Three.js: 使用 lookAt 或者设置旋转
           // 方法1：使用 lookAt（更可靠）
-          const lookAtPos = new THREE.Vector3(0, 15, 0); // 模型中心
+          const lookAtPos = new window.THREE.Vector3(0, 15, 0); // 模型中心
           dualViewer.camera1.lookAt(lookAtPos);
 
           // 方法2：设置旋转（如果需要精确控制）
@@ -6455,7 +6470,7 @@ async loadTestSfcComponent(instanceId) {
 
       // 2. 检查场景容器位置
       if (dualViewer.sceneContainer1) {
-        const containerWorldPos = new THREE.Vector3();
+        const containerWorldPos = new window.THREE.Vector3();
         dualViewer.sceneContainer1.getWorldPosition(containerWorldPos);
         console.log('%c--- 2. 场景容器 (sceneContainer1) ---', 'color: #60a5fa; font-weight: bold');
         console.log('局部坐标:', {
@@ -6472,7 +6487,7 @@ async loadTestSfcComponent(instanceId) {
 
       // 3. 检查锚点容器位置
       if (dualViewer.anchorContainer1) {
-        const anchorWorldPos = new THREE.Vector3();
+        const anchorWorldPos = new window.THREE.Vector3();
         dualViewer.anchorContainer1.getWorldPosition(anchorWorldPos);
         console.log('%c--- 3. 锚点容器 (anchorContainer1) ---', 'color: #60a5fa; font-weight: bold');
         console.log('局部坐标:', {
@@ -6491,7 +6506,7 @@ async loadTestSfcComponent(instanceId) {
         dualViewer.anchorContainer1.traverse((obj) => {
           if (obj.name === 'GroundMarker_Theoretical') {
             redSphereFound = true;
-            const sphereWorldPos = new THREE.Vector3();
+            const sphereWorldPos = new window.THREE.Vector3();
             obj.getWorldPosition(sphereWorldPos);
             console.log('%c--- 4. 红色球体 (GroundMarker_Theoretical) ---', 'color: #f87171; font-weight: bold');
             console.log('局部坐标:', {
@@ -6513,9 +6528,9 @@ async loadTestSfcComponent(instanceId) {
       if (dualViewer.modelGroup1 && dualViewer.modelGroup1.children.length > 0) {
         console.log('%c--- 5. 模型信息 ---', 'color: #4ade80; font-weight: bold');
         dualViewer.modelGroup1.children.forEach((model, index) => {
-          const modelWorldPos = new THREE.Vector3();
+          const modelWorldPos = new window.THREE.Vector3();
           model.getWorldPosition(modelWorldPos);
-          const bbox = new THREE.Box3().setFromObject(model);
+          const bbox = new window.THREE.Box3().setFromObject(model);
           const modelAltitude = model.userData?.originalLocation?.cartographic?.height;
 
           console.log(`模型 ${index + 1} (${model.name || 'unnamed'}):`, {
@@ -6663,7 +6678,7 @@ async loadTestSfcComponent(instanceId) {
             // 检查是否有变换矩阵
             if (model.userData.matrix) {
               console.log('变换矩阵:', model.userData.matrix);
-              const euler = new THREE.Euler().setFromRotationMatrix(new THREE.Matrix4().fromArray(model.userData.matrix));
+              const euler = new window.THREE.Euler().setFromRotationMatrix(new window.THREE.Matrix4().fromArray(model.userData.matrix));
               console.warn('  ⚠️  发现变换矩阵，对应的欧拉角:', {
                 x: euler.x.toFixed(4) + ` (${(euler.x * 180 / Math.PI).toFixed(2)}°)`,
                 y: euler.y.toFixed(4) + ` (${(euler.y * 180 / Math.PI).toFixed(2)}°)`,
@@ -6695,7 +6710,7 @@ async loadTestSfcComponent(instanceId) {
         if (dualViewer.anchorContainer1) {
           dualViewer.anchorContainer1.traverse((obj) => {
             if (obj.name === 'GroundMarker_Theoretical') {
-              const sphereWorldPos = new THREE.Vector3();
+              const sphereWorldPos = new window.THREE.Vector3();
               obj.getWorldPosition(sphereWorldPos);
               redSphereY = sphereWorldPos.y;
             }
@@ -6732,7 +6747,7 @@ async loadTestSfcComponent(instanceId) {
           console.log('  model.parent.parent:', model.parent?.parent?.type || 'null');
 
           // 世界位置 vs 本地位置
-          const worldPos = new THREE.Vector3();
+          const worldPos = new window.THREE.Vector3();
           model.getWorldPosition(worldPos);
           console.log('  --- 位置对比 ---');
           console.log('  世界位置 (getWorldPosition):', `x=${worldPos.x.toFixed(2)}, y=${worldPos.y.toFixed(2)}, z=${worldPos.z.toFixed(2)}`);
@@ -6778,9 +6793,9 @@ async loadTestSfcComponent(instanceId) {
           // 包围盒详细信息
           console.log('  --- 包围盒详情 ---');
           try {
-            const box = new THREE.Box3().setFromObject(model);
-            const size = box.getSize(new THREE.Vector3());
-            const center = box.getCenter(new THREE.Vector3());
+            const box = new window.THREE.Box3().setFromObject(model);
+            const size = box.getSize(new window.THREE.Vector3());
+            const center = box.getCenter(new window.THREE.Vector3());
             console.log('  包围盒尺寸:', `x=${size.x.toFixed(2)}, y=${size.y.toFixed(2)}, z=${size.z.toFixed(2)}`);
             console.log('  包围盒中心:', `x=${center.x.toFixed(2)}, y=${center.y.toFixed(2)}, z=${center.z.toFixed(2)}`);
             console.log('  包围盒 min:', `x=${box.min.x.toFixed(2)}, y=${box.min.y.toFixed(2)}, z=${box.min.z.toFixed(2)}`);
@@ -6801,7 +6816,7 @@ async loadTestSfcComponent(instanceId) {
           if (model.children && model.children.length > 0) {
             console.log('  --- 子模型详细变换 ---');
             model.children.slice(0, 3).forEach((child, i) => {
-              const childWorldPos = new THREE.Vector3();
+              const childWorldPos = new window.THREE.Vector3();
               child.getWorldPosition(childWorldPos);
               console.log(`  子模型 ${i + 1} (${child.name || child.type}):`);
               console.log(`    本地位置: (${child.position.x.toFixed(2)}, ${child.position.y.toFixed(2)}, ${child.position.z.toFixed(2)})`);
@@ -7043,14 +7058,14 @@ async loadTestSfcComponent(instanceId) {
           }
 
           // 获取当前世界位置
-          const currentWorldPos = new THREE.Vector3();
+          const currentWorldPos = new window.THREE.Vector3();
           model.getWorldPosition(currentWorldPos);
           const currentY = currentWorldPos.y;
 
           console.log(`  目标海拔: ${actualSurfaceHeight.toFixed(2)} 米`);
           console.log(`  当前世界Y: ${currentY.toFixed(2)} 米`);
 
-          const bbox = new THREE.Box3().setFromObject(model);
+          const bbox = new window.THREE.Box3().setFromObject(model);
           const bboxMinY = bbox.min.y;
 
           // 计算内部偏移和目标位置
@@ -7065,7 +7080,7 @@ async loadTestSfcComponent(instanceId) {
           model.updateMatrixWorld(true);
 
           // 验证
-          const newBbox = new THREE.Box3().setFromObject(model);
+          const newBbox = new window.THREE.Box3().setFromObject(model);
           const newAltitudeDiff = Math.abs(actualSurfaceHeight - newBbox.min.y);
 
           if (newAltitudeDiff < 0.5) {
@@ -7083,8 +7098,8 @@ async loadTestSfcComponent(instanceId) {
           let scaleFixed = false;
 
           // 获取当前状态
-          const bbox = new THREE.Box3().setFromObject(model);
-          const bboxSize = new THREE.Vector3();
+          const bbox = new window.THREE.Box3().setFromObject(model);
+          const bboxSize = new window.THREE.Vector3();
           bbox.getSize(bboxSize);
           const bboxHeight = bboxSize.y;
 
@@ -7105,8 +7120,8 @@ async loadTestSfcComponent(instanceId) {
           //   scaleFixed = true;
 
           //   // 重新计算包围盒
-          //   const newBbox = new THREE.Box3().setFromObject(model);
-          //   const newBboxSize = new THREE.Vector3();
+          //   const newBbox = new window.THREE.Box3().setFromObject(model);
+          //   const newBboxSize = new window.THREE.Vector3();
           //   newBbox.getSize(newBboxSize);
           //   const newBboxHeight = newBboxSize.y;
 
@@ -7154,7 +7169,7 @@ async loadTestSfcComponent(instanceId) {
             }
 
             // 检查旋转是否异常（接近 90° 或 180°）
-            const euler = new THREE.Euler().setFromQuaternion(child.quaternion);
+            const euler = new window.THREE.Euler().setFromQuaternion(child.quaternion);
             const rotXDeg = Math.abs(euler.x * 180 / Math.PI) % 360;
             const rotYDeg = Math.abs(euler.y * 180 / Math.PI) % 360;
             const rotZDeg = Math.abs(euler.z * 180 / Math.PI) % 360;
@@ -7181,7 +7196,7 @@ async loadTestSfcComponent(instanceId) {
           });
 
           // 遍历所有 Mesh 检查是否还有倒置
-          const bboxCenter = new THREE.Vector3();
+          const bboxCenter = new window.THREE.Vector3();
           bbox.getCenter(bboxCenter);
           const relativeCenterY = bboxCenter.y - model.position.y;
 
@@ -7198,8 +7213,8 @@ async loadTestSfcComponent(instanceId) {
             invertedFixed = true;
 
             // 验证修复
-            const rotatedBbox = new THREE.Box3().setFromObject(model);
-            const rotatedCenter = new THREE.Vector3();
+            const rotatedBbox = new window.THREE.Box3().setFromObject(model);
+            const rotatedCenter = new window.THREE.Vector3();
             rotatedBbox.getCenter(rotatedCenter);
             const newRelativeCenterY = rotatedCenter.y - model.position.y;
 
@@ -7219,8 +7234,8 @@ async loadTestSfcComponent(instanceId) {
           // 3. ⭐ 改进：更准确的倒置检测和多种旋转尝试
           console.log(`  --- 倒置检测与修复（增强版） ---`);
 
-          const bboxBeforeRotation = new THREE.Box3().setFromObject(model);
-          const sizeBeforeRotation = new THREE.Vector3();
+          const bboxBeforeRotation = new window.THREE.Box3().setFromObject(model);
+          const sizeBeforeRotation = new window.THREE.Vector3();
           bboxBeforeRotation.getSize(sizeBeforeRotation);
 
           console.log(`  边界框尺寸: X=${sizeBeforeRotation.x.toFixed(2)}m, Y=${sizeBeforeRotation.y.toFixed(2)}m, Z=${sizeBeforeRotation.z.toFixed(2)}m`);
@@ -7229,13 +7244,13 @@ async loadTestSfcComponent(instanceId) {
           const isZUpBySize = sizeBeforeRotation.z > sizeBeforeRotation.y * 1.2;
 
           // ⭐ 方法2：检查模型的整体旋转（通过检查第一个 Mesh 的 up 向量）
-          let firstMeshUp = new THREE.Vector3(0, 1, 0);
+          let firstMeshUp = new window.THREE.Vector3(0, 1, 0);
           let firstMeshFound = false;
           model.traverse((child) => {
             if (!firstMeshFound && child.isMesh) {
               firstMeshFound = true;
               // 获取 Mesh 的 up 向量（考虑其变换）
-              const up = new THREE.Vector3(0, 1, 0);
+              const up = new window.THREE.Vector3(0, 1, 0);
               up.applyQuaternion(child.quaternion);
               firstMeshUp.copy(up);
             }
@@ -7278,8 +7293,8 @@ async loadTestSfcComponent(instanceId) {
             });
 
             // 获取场景容器的四元数
-            const sceneQuaternion = new THREE.Quaternion();
-            sceneQuaternion.setFromEuler(new THREE.Euler(
+            const sceneQuaternion = new window.THREE.Quaternion();
+            sceneQuaternion.setFromEuler(new window.THREE.Euler(
               sceneContainer.rotation.x,
               sceneContainer.rotation.y,
               sceneContainer.rotation.z,
@@ -7318,8 +7333,8 @@ async loadTestSfcComponent(instanceId) {
           }
 
           // 验证结果
-          const rotatedBbox = new THREE.Box3().setFromObject(model);
-          const rotatedSize = new THREE.Vector3();
+          const rotatedBbox = new window.THREE.Box3().setFromObject(model);
+          const rotatedSize = new window.THREE.Vector3();
           rotatedBbox.getSize(rotatedSize);
 
           const rotationName = isCatwalk04 ? '场景容器反向旋转 (Catwalk04)' : '场景容器反向旋转 + up调整 (CesiumMan)';
@@ -7332,7 +7347,7 @@ async loadTestSfcComponent(instanceId) {
 
           // 4. 将模型放置在地面上（与红色球体对齐）
           // 目标：模型底部应该在 Y=0
-          const finalBbox = new THREE.Box3().setFromObject(model);
+          const finalBbox = new window.THREE.Box3().setFromObject(model);
           const finalBboxMinY = finalBbox.min.y;
 
           console.log(`  --- 地面对齐 ---`);
@@ -7347,7 +7362,7 @@ async loadTestSfcComponent(instanceId) {
             model.updateMatrixWorld(true);
 
             // 验证
-            const verifyBbox = new THREE.Box3().setFromObject(model);
+            const verifyBbox = new window.THREE.Box3().setFromObject(model);
             console.log(`  ✅ 地面对齐完成，新底部: ${verifyBbox.min.y.toFixed(2)} 米`);
           } else {
             console.log(`  ✅ 模型已在地面上，无需移动`);
@@ -7370,7 +7385,7 @@ async loadTestSfcComponent(instanceId) {
       if (dualViewer.referenceModelPosition && (fixedLargeCoordCount > 0 || fixedSmallCoordCount > 0)) {
         const largeCoordModel = dualViewer.modelGroup1.children.find(m => m.userData?.isLargeCoordModel);
         if (largeCoordModel) {
-          const worldPos = new THREE.Vector3();
+          const worldPos = new window.THREE.Vector3();
           largeCoordModel.getWorldPosition(worldPos);
           dualViewer.referenceModelPosition = worldPos;
           console.log('✅ 已更新 referenceModelPosition');
@@ -7806,8 +7821,8 @@ async loadTestSfcComponent(instanceId) {
         }
 
         // 计算新的包围盒
-        const bbox = new THREE.Box3().setFromObject(model);
-        const size = new THREE.Vector3();
+        const bbox = new window.THREE.Box3().setFromObject(model);
+        const size = new window.THREE.Vector3();
         bbox.getSize(size);
 
         console.log(`✅ 旋转已应用到所有子对象:`, {
@@ -7847,8 +7862,8 @@ async loadTestSfcComponent(instanceId) {
       console.log('\n📦 当前模型列表:');
       dualViewer.modelGroup1.children.forEach((model, i) => {
         const fileName = model.userData?.fileName || model.name || 'unnamed';
-        const bbox = new THREE.Box3().setFromObject(model);
-        const size = new THREE.Vector3();
+        const bbox = new window.THREE.Box3().setFromObject(model);
+        const size = new window.THREE.Vector3();
         bbox.getSize(size);
 
         console.log(`模型 ${i}: ${fileName}`, {
@@ -8744,12 +8759,12 @@ async loadTestSfcComponent(instanceId) {
 
       // 1. 从 Cesium 获取相机状态并转换为 Three.js 坐标系
       const cesiumBasis = {
-        direction: new THREE.Vector3(
+        direction: new window.THREE.Vector3(
           camera.direction.x,
           -camera.direction.z,  // Cesium Z → Three.js Y (反向)
           camera.direction.y     // Cesium Y → Three.js Z
         ),
-        up: new THREE.Vector3(
+        up: new window.THREE.Vector3(
           camera.up.x,
           -camera.up.z,
           camera.up.y
@@ -8761,12 +8776,12 @@ async loadTestSfcComponent(instanceId) {
       cesiumBasis.up.normalize();
 
       // 计算右向量
-      const right = new THREE.Vector3();
+      const right = new window.THREE.Vector3();
       right.crossVectors(cesiumBasis.direction, cesiumBasis.up).normalize();
 
       // 使用 setFromBasis 方法直接设置四元数
-      const quaternion = new THREE.Quaternion();
-      const matrix = new THREE.Matrix4();
+      const quaternion = new window.THREE.Quaternion();
+      const matrix = new window.THREE.Matrix4();
       matrix.makeBasis(right, cesiumBasis.up, cesiumBasis.direction);
       quaternion.setFromRotationMatrix(matrix);
 
@@ -8868,12 +8883,12 @@ async loadTestSfcComponent(instanceId) {
 
       // 创建一个临时对象，用于转换 Cesium 的相机基座
       const cesiumBasis = {
-        direction: new THREE.Vector3(
+        direction: new window.THREE.Vector3(
           camera.direction.x,
           -camera.direction.z,  // Cesium Z → Three.js Y (反向)
           camera.direction.y     // Cesium Y → Three.js Z
         ),
-        up: new THREE.Vector3(
+        up: new window.THREE.Vector3(
           camera.up.x,
           -camera.up.z,
           camera.up.y
@@ -8885,12 +8900,12 @@ async loadTestSfcComponent(instanceId) {
       cesiumBasis.up.normalize();
 
       // 计算右向量
-      const right = new THREE.Vector3();
+      const right = new window.THREE.Vector3();
       right.crossVectors(cesiumBasis.direction, cesiumBasis.up).normalize();
 
       // 使用 setFromBasis 方法直接设置四元数
-      const quaternion = new THREE.Quaternion();
-      const matrix = new THREE.Matrix4();
+      const quaternion = new window.THREE.Quaternion();
+      const matrix = new window.THREE.Matrix4();
       matrix.makeBasis(right, cesiumBasis.up, cesiumBasis.direction);
       quaternion.setFromRotationMatrix(matrix);
 

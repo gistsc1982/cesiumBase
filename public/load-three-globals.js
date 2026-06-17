@@ -25,9 +25,16 @@
     console.log('[ThreeJSGlobalLoader] ✅ OrbitControls 已加载');
 
     // ⭐ 加载 TransformControls（本地，通过 import map）
-    const { TransformControls } = await import('three/addons/controls/TransformControls.js');
-    window.TransformControls = TransformControls;
-    console.log('[ThreeJSGlobalLoader] ✅ TransformControls 已加载');
+    // ⚠️ 注意：某些版本的 TransformControls 可能依赖不存在的 Controls 基类
+    // 如果加载失败，跳过此模块（它不是必需的）
+    try {
+      const { TransformControls } = await import('three/addons/controls/TransformControls.js');
+      window.TransformControls = TransformControls;
+      console.log('[ThreeJSGlobalLoader] ✅ TransformControls 已加载');
+    } catch (error) {
+      console.warn('[ThreeJSGlobalLoader] ⚠️ TransformControls 加载失败（跳过）:', error.message);
+      window.TransformControls = null;
+    }
 
     // ⭐ 加载 PLYLoader（本地，通过 import map）
     const { PLYLoader } = await import('three/addons/loaders/PLYLoader.js');

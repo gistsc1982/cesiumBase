@@ -7,6 +7,12 @@
 // - 多实例类：导出类定义，使用大写命名（如 window.ViewerSyncManager），不创建实例
 
 (function() {
+  // ⭐ 检查是否已经加载过
+  if (typeof window !== 'undefined' && window.__utilityModulesLoaded) {
+    console.log('[UtilityModulesLoader] ℹ️ 工具模块已经加载，跳过');
+    return;
+  }
+
   console.log('[UtilityModulesLoader] 📍 脚本开始执行...');
 
   // 模块路径映射 - 智能检测路径
@@ -226,4 +232,7 @@
 
   // 也可以手动触发加载（用于延迟加载）
   window.loadUtilityModules = loadUtilityModules;
+
+  // ⭐ 标记为已加载
+  window.__utilityModulesLoaded = true;
 })();
