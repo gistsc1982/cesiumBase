@@ -15,19 +15,20 @@
     @minimize="handleMinimize"
     @expand="handleExpand"
   >
-    <!-- 动态内容渲染 -->
-    <template v-if="dynamicContent.component">
-      <component
-        :is="dynamicContent.component"
-        v-bind="dynamicContent.props"
-        v-on="dynamicContent.events"
-      />
-    </template>
+    <template #default="slotProps">
+      <!-- 动态内容渲染 -->
+      <template v-if="dynamicContent.component">
+        <component
+          :is="dynamicContent.component"
+          v-bind="{ ...dynamicContent.props, isClosed: slotProps.isClosed }"
+          v-on="dynamicContent.events"
+        />
+      </template>
 
-    <!-- 静态插槽内容 - 默认显示原测试内容 -->
-    <slot v-else name="content">
-      <!-- 原有默认内容保持不变 -->
-      <div class="test-panel-content">
+      <!-- 静态插槽内容 - 默认显示原测试内容 -->
+      <slot v-else name="content" :is-closed="slotProps.isClosed">
+        <!-- 原有默认内容保持不变 -->
+        <div class="test-panel-content">
         <div class="section-title">🎉 自动加载测试</div>
         <p class="hint-text">
           这个面板是通过以下方式自动加载的：
@@ -64,7 +65,8 @@
           </div>
         </div>
       </div>
-    </slot>
+      </slot>
+    </template>
   </FunctionPanelUIBase>
 </template>
 

@@ -251,10 +251,11 @@ class PanelSingletonManager {
       component: config.component,
       props: config.props || {},
       visible: config.visible !== false,
-      isClosed: false
+      isClosed: config.visible === false
     });
     console.log(`[PanelSingletonManager] ✅ 注册面板: ${panelName}`, {
       visible: config.visible,
+      isClosed: config.visible === false,
       hasComponent: !!config.component
     });
   }

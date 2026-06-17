@@ -54,7 +54,7 @@
         <!-- 面板内容 -->
         <Transition name="content-slide">
           <div v-show="!isMinimized" class="panel-body" :style="bodyStyles">
-            <slot></slot>
+            <slot :is-closed="isClosed"></slot>
           </div>
         </Transition>
       </div>
@@ -170,7 +170,7 @@ export default {
       dragOffsetY: 0,
       // 面板状态
       isMinimized: false,
-      isClosed: false,
+      isClosed: true,  // 默认关闭，只有当配置 visible: true 时才打开
       // 事件处理器引用
       boundMouseMove: null,
       boundMouseUp: null,
@@ -216,13 +216,14 @@ export default {
     }
 
     // ⭐ 从 PanelSingletonManager 同步 isClosed 状态
-    // 如果注册表中的 isClosed 为 false，重置组件的 isClosed 状态
+    // 无论注册表中的 isClosed 是什么值，都同步到组件
     const panelName = this.effectiveRegistrationKey;
     if (panelSingletonManager.hasPanel(panelName)) {
       const panel = panelSingletonManager.getPanel(panelName);
-      if (panel && !panel.isClosed && this.isClosed) {
-        console.log(`[FunctionPanelUIBase] 🔓 从 PanelSingletonManager 恢复面板状态: ${panelName}, isClosed = false`);
-        this.isClosed = false;
+      if (panel) {
+        const oldIsClosed = this.isClosed;
+        this.isClosed = panel.isClosed;
+        console.log(`[FunctionPanelUIBase] 🔓 从 PanelSingletonManager 同步面板状态: ${panelName}, isClosed: ${oldIsClosed} -> ${this.isClosed}`);
       }
     }
 
@@ -290,12 +291,22 @@ export default {
      * @returns {Object|null} 实例配置
      */
     getInstanceConfig() {
-      // 从多实例配置管理器获取实例特定的配置
-      if (typeof window !== 'undefined' && window.__multiInstancePanelConfigManager__) {
-        return window.__multiInstancePanelConfigManager__.getPanelConfig(
-          this.instanceId,
-          this.registrationKey
-        );
+      // ⭐ 判断是单例面板还是多实例面板
+      const isMultiInstance = this.panelInstanceId !== null;
+
+      if (isMultiInstance) {
+        // 多实例面板：从 MultiInstancePanelConfigManager 获取实例配置
+        if (typeof window !== 'undefined' && window.__multiInstancePanelConfigManager__) {
+          return window.__multiInstancePanelConfigManager__.getPanelConfig(
+            this.instanceId,
+            this.registrationKey
+          );
+        }
+      } else {
+        // 单例面板：从 FunctionPanelsConfigManager 获取面板配置
+        if (typeof window !== 'undefined' && window.__functionPanelsConfigManager__) {
+          return window.__functionPanelsConfigManager__.getPanel(this.effectiveRegistrationKey);
+        }
       }
       return null;
     },
@@ -360,8 +371,8 @@ export default {
           ...(instanceConfig?.position || {})
         };
 
-        // 使用实例配置的可见性，如果没有则默认为true
-        const visible = instanceConfig ? instanceConfig.visible : true;
+        // 使用实例配置的可见性，如果没有则默认为false（默认关闭）
+        const visible = instanceConfig ? (instanceConfig.visible !== false) : false;
 
         // ⭐ 单例面板：不传递组件实例（组件已在预加载时加载）
         // ⭐ 关键修复：检查面板是否已经在 PanelSingletonManager 中设置为 visible

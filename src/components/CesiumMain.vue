@@ -1227,6 +1227,11 @@ export default {
         // ⭐ 从多实例配置管理器获取实例特定的配置
         const instancePanelConfig = multiInstancePanelConfigManager.getPanelConfig(instanceId, key);
 
+        // ⭐ 从 FunctionPanelsConfigManager 获取单例面板配置
+        const functionPanelConfig = window.__functionPanelsConfigManager__
+          ? window.__functionPanelsConfigManager__.getPanel(key)
+          : null;
+
         // 合并配置：实例配置优先，然后是传入的配置
         const mergedProps = {
           ...(instancePanelConfig?.position || {}),
