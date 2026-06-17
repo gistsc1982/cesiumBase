@@ -157,96 +157,136 @@ function validateAllPanels(config) {
   };
 }
 
+/**
+ * 从 functionPanels.config.json 读取并生成 EXAMPLE_PANELS 的硬编码值
+ * 用于更新文件中的 EXAMPLE_PANELS 常量
+ */
+function generateExamplePanelsCode() {
+  try {
+    const config = JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf8'));
+    const panels = {};
+
+    // 按 baseName 分组（单例和多实例）
+    const panelGroups = {};
+
+    for (const panel of config.panels) {
+      // 提取基础名称（移除 Multi 后缀）
+      let baseName = panel.name;
+      if (panel.name.endsWith('Multi')) {
+        baseName = panel.name.slice(0, -5); // 移除 'Multi'
+      }
+
+      if (!panelGroups[baseName]) {
+        panelGroups[baseName] = {};
+      }
+
+      if (panel.name.endsWith('Multi')) {
+        panelGroups[baseName].multi = panel;
+      } else {
+        panelGroups[baseName].singleton = panel;
+      }
+    }
+
+    // 转换为 EXAMPLE_PANELS 格式
+    for (const [baseName, group] of Object.entries(panelGroups)) {
+      const singleton = group.singleton;
+      const multi = group.multi;
+
+      if (!singleton && !multi) continue;
+
+      // 从单例或多实例配置构建面板对象
+      const panelConfig = {
+        name: baseName,
+        file: (singleton || multi).file,
+        title: (singleton || multi).title?.replace('（单例）', '').replace('（多实例）', ''),
+        description: (singleton || multi).description?.replace('（单例模式）', '').replace('（多实例）', '').replace('（多实例模式）', ''),
+        icon: (singleton || multi).icon,
+        category: (singleton || multi).category,
+        singletonContainerId: (singleton || multi).singletonContainerId || baseName
+      };
+
+      // 单例位置信息
+      if (singleton) {
+        panelConfig.position = singleton.position;
+      }
+
+      // 多实例位置和信息
+      if (multi) {
+        panelConfig.multiPosition = multi.position;
+        panelConfig.multiIcon = multi.icon;
+        panelConfig.multiCategory = multi.category;
+      } else if (singleton) {
+        // 如果没有多实例配置，使用单例配置作为默认值
+        panelConfig.multiPosition = singleton.position;
+        panelConfig.multiIcon = singleton.icon;
+        panelConfig.multiCategory = singleton.category;
+      }
+
+      panels[baseName] = panelConfig;
+    }
+
+    return panels;
+  } catch (error) {
+    console.error('读取面板配置失败:', error.message);
+    return {};
+  }
+}
+
+/**
+ * 生成 EXAMPLE_PANELS 的硬编码代码字符串
+ */
+function generateExamplePanelsString() {
+  const panels = generateExamplePanelsCode();
+  const panelNames = Object.keys(panels).sort();
+
+  let code = '// 示例面板配置（包含单例和多实例的完整配置）\n';
+  code += '// 所有继承 FunctionPanelUIBase 的组件都在这里配置\n';
+  code += '// 使用 \'node panel-config.js load-example-panels\' 命令更新此常量\n';
+  code += 'const EXAMPLE_PANELS = {\n';
+
+  for (const name of panelNames) {
+    const panel = panels[name];
+    code += `  ${name}: {\n`;
+    code += `    name: '${panel.name}',\n`;
+    code += `    file: '${panel.file}',\n`;
+    code += `    title: '${panel.title}',\n`;
+    code += `    description: '${panel.description}',\n`;
+    code += `    icon: '${panel.icon}',\n`;
+    code += `    category: '${panel.category}',\n`;
+    code += `    singletonContainerId: '${panel.singletonContainerId}',\n`;
+    code += `    position: ${JSON.stringify(panel.position)},\n`;
+    code += `    multiPosition: ${JSON.stringify(panel.multiPosition)},\n`;
+    code += `    multiIcon: '${panel.multiIcon}',\n`;
+    code += `    multiCategory: '${panel.multiCategory}'\n`;
+    code += `  }${name !== panelNames[panelNames.length - 1] ? ',' : ''}\n`;
+  }
+
+  code += '};';
+  return code;
+}
+
 // 示例面板配置（包含单例和多实例的完整配置）
 // 所有继承 FunctionPanelUIBase 的组件都在这里配置
+// 使用 'node panel-config.js load-example-panels' 命令更新此常量
 const EXAMPLE_PANELS = {
-  // ==================== 核心功能面板 ====================
-
-  // 倾斜摄影功能面板（直接继承 FunctionPanelUIBase）
-  ObliquePhotographyPanel: {
-    name: 'ObliquePhotographyPanel',
-    file: 'ObliquePhotographyPanel.vue',
-    title: '倾斜摄影面板',
-    description: '倾斜摄影模型加载和管理面板（单例模式）',
-    icon: '📷',
+  DualCanvasViewer: {
+    name: 'DualCanvasViewer',
+    file: 'test-sfc/sfcLib/dist/dual-canvas-viewer-sfc/lib/dual-canvas-viewer.mjs',
+    title: 'mjs双画布查看器',
+    description: 'mjs双画布查看器（单实例）',
+    icon: '🧬',
     category: 'tools',
-    singletonContainerId: 'obliquePhotographyPanel',
-    position: { initialX: 'center', initialY: 120 },
-    multiPosition: { initialX: 'center', initialY: 200 },
-    multiIcon: '📷',
-    multiCategory: 'tools'
-  },
-
-  // 倾斜摄影高度调整面板（直接继承 FunctionPanelUIBase）
-  ObliqueHeightAdjustPanel: {
-    name: 'ObliqueHeightAdjustPanel',
-    file: 'ObliqueHeightAdjustPanel.vue',
-    title: '高度调整面板',
-    description: '倾斜摄影高度偏移调整面板（单例模式）',
-    icon: '📏',
-    category: 'tools',
-    singletonContainerId: 'obliqueHeightAdjustPanel',
-    position: { initialX: 'right', initialY: 100 },
-    multiPosition: { initialX: 'right', initialY: 180 },
-    multiIcon: '📐',
-    multiCategory: 'tools'
-  },
-
-  // ==================== 测试面板 ====================
-
-  // 测试面板（直接继承 FunctionPanelUIBase）
-  TestPanel: {
-    name: 'TestPanel',
-    file: 'TestPanel.vue',
-    title: 'TestPanel（单例）',
-    description: 'TestPanel（单例模式）',
-    icon: '🧪',
-    category: 'test',
-    singletonContainerId: 'testPanel',
-    position: { initialX: 'left', initialY: 100 },
-    multiPosition: { initialX: 'left', initialY: 180 },
-    multiIcon: '🧪',
-    multiCategory: 'test'
-  },
-
-  // TestPanelModule 模板（直接继承 FunctionPanelUIBase）
-  TestPanelModule: {
-    name: 'TestPanelModule',
-    file: 'TestPanelModule.vue',
-    title: '面板模板',
-    description: '可复用的面板模板（单例模式）',
-    icon: '📦',
-    category: 'test',
-    singletonContainerId: 'testPanelModule',
-    position: { initialX: 'left', initialY: 140 },
-    multiPosition: { initialX: 'left', initialY: 220 },
-    multiIcon: '📋',
-    multiCategory: 'test'
-  },
-
-  // ==================== 示例面板（间接继承） ====================
-
-  // SetContent 示例（通过 TestPanelModule 间接继承）
-  SetContentExample: {
-    name: 'SetContentExample',
-    file: 'examples/SetContentExample.vue',
-    title: 'SetContent 示例',
-    description: 'TestPanelModule setContent 方法使用示例（单例模式）',
-    icon: '📦',
-    category: 'test',
-    singletonContainerId: 'setContentExample',
-    position: { initialX: 'right', initialY: 200 },
-    multiPosition: { initialX: 'center', initialY: 150 },
+    singletonContainerId: 'dualCanvasContainer',
+    position: { initialX: 'center', initialY: 100 },
+    multiPosition: { initialX: 'center', initialY: 100 },
     multiIcon: '🧬',
-    multiCategory: 'test'
+    multiCategory: 'tools'
   },
-
-  // 多内容切换示例（通过 TestPanelModule 间接继承）
   MultiContentExample: {
     name: 'MultiContentExample',
     file: 'examples/MultiContentExample.vue',
     title: '多内容切换示例',
-    description: 'TestPanelModule 动态切换内容示例（单例模式）',
+    description: 'TestPanelModule 动态切换内容示例',
     icon: '🔄',
     category: 'test',
     singletonContainerId: 'contentExample',
@@ -255,19 +295,95 @@ const EXAMPLE_PANELS = {
     multiIcon: '🔀',
     multiCategory: 'test'
   },
-
-  // 插槽示例（通过 TestPanelModule 间接继承）
+  ObliqueHeightAdjustPanel: {
+    name: 'ObliqueHeightAdjustPanel',
+    file: 'ObliqueHeightAdjustPanel.vue',
+    title: '高度调整面板',
+    description: '倾斜摄影高度偏移调整面板',
+    icon: '📏',
+    category: 'tools',
+    singletonContainerId: 'obliqueHeightAdjustPanel',
+    position: { initialX: 'right', initialY: 100 },
+    multiPosition: { initialX: 'right', initialY: 180 },
+    multiIcon: '📐',
+    multiCategory: 'tools'
+  },
+  ObliquePhotographyPanel: {
+    name: 'ObliquePhotographyPanel',
+    file: 'ObliquePhotographyPanel.vue',
+    title: '倾斜摄影面板',
+    description: '倾斜摄影模型加载和管理面板',
+    icon: '📷',
+    category: 'tools',
+    singletonContainerId: 'obliquePhotographyPanel',
+    position: { initialX: 'center', initialY: 120 },
+    multiPosition: { initialX: 'center', initialY: 200 },
+    multiIcon: '📷',
+    multiCategory: 'tools'
+  },
+  ObliquePhotographyPanelExample: {
+    name: 'ObliquePhotographyPanelExample',
+    file: 'ObliquePhotographyPanelExample.vue',
+    title: '测试面板',
+    description: '测试 JsonConfigPanelBase',
+    icon: '🧪',
+    category: 'test',
+    singletonContainerId: 'obliquePhotographyPanelExample',
+    position: { initialX: 'left', initialY: 150 },
+    multiPosition: { initialX: 'left', initialY: 150 },
+    multiIcon: '🧪',
+    multiCategory: 'test'
+  },
+  SetContentExample: {
+    name: 'SetContentExample',
+    file: 'examples/SetContentExample.vue',
+    title: 'SetContent 示例',
+    description: 'TestPanelModule setContent 方法使用示例',
+    icon: '📦',
+    category: 'test',
+    singletonContainerId: 'setContentExample',
+    position: { initialX: 'right', initialY: 200 },
+    multiPosition: { initialX: 'center', initialY: 150 },
+    multiIcon: '🧬',
+    multiCategory: 'test'
+  },
   SlotExample: {
     name: 'SlotExample',
     file: 'examples/SlotExample.vue',
     title: '插槽示例',
-    description: 'TestPanelModule 插槽使用示例（单例模式）',
+    description: 'TestPanelModule 插槽使用示例',
     icon: '🎨',
     category: 'test',
     singletonContainerId: 'slotExample',
     position: { initialX: 'right', initialY: 360 },
-    multiPosition: { initialX: 'center', initialY: 440 },
-    multiIcon: '🖼️',
+    multiPosition: { initialX: 'center', initialY: 200 },
+    multiIcon: '🧬',
+    multiCategory: 'test'
+  },
+  TestPanel: {
+    name: 'TestPanel',
+    file: 'TestPanel.vue',
+    title: 'TestPanel',
+    description: 'TestPanel',
+    icon: '🧪',
+    category: 'test',
+    singletonContainerId: 'testPanel',
+    position: { initialX: 'left', initialY: 100 },
+    multiPosition: { initialX: 'left', initialY: 100 },
+    multiIcon: '🧪',
+    multiCategory: 'test'
+  },
+  TestPanelModule: {
+    name: 'TestPanelModule',
+    file: 'TestPanelModule.vue',
+    title: '面板模板',
+    description: '可复用的面板模板',
+    icon: '📦',
+    category: 'test',
+    singletonContainerId: 'testPanelModule',
+    position: { initialX: 'left', initialY: 140 },
+    multiPosition: { initialX: 'left', initialY: 220 },
+    multiIcon: '📋',
     multiCategory: 'test'
   }
 };
@@ -443,6 +559,7 @@ function showHelp() {
   list                    列出所有面板配置
   export                  导出配置文件（打印到控制台）
   validate                验证配置文件格式是否符合元数据规范
+  load-example-panels     从 functionPanels.config.json 更新 EXAMPLE_PANELS 硬编码值
 
 示例：
   node panel-config.js add SetContentExample
@@ -451,6 +568,7 @@ function showHelp() {
   node panel-config.js remove SetContentExample
   node panel-config.js export
   node panel-config.js validate
+  node panel-config.js load-example-panels
 
 可用的面板名称：
   核心功能面板:
@@ -585,6 +703,26 @@ async function main() {
         console.log('\n❌ 配置文件验证失败，请修复上述错误。');
         process.exit(1);
       }
+      break;
+    }
+
+    case 'load-example-panels': {
+      console.log('🔄 从 functionPanels.config.json 更新 EXAMPLE_PANELS...');
+      const newCode = generateExamplePanelsString();
+
+      // 读取当前文件内容
+      const currentFilePath = __filename;
+      let currentContent = fs.readFileSync(currentFilePath, 'utf8');
+
+      // 使用正则表达式匹配并替换 EXAMPLE_PANELS 定义
+      // 匹配从 "// 示例面板配置" 到 "};\n" 的整个 EXAMPLE_PANELS 定义
+      const examplePanelsRegex = /\/\/ 示例面板配置[\s\S]*?const EXAMPLE_PANELS = \{[\s\S]*?^};/;
+      currentContent = currentContent.replace(examplePanelsRegex, newCode);
+
+      // 写回文件
+      fs.writeFileSync(currentFilePath, currentContent, 'utf8');
+      console.log('✅ EXAMPLE_PANELS 已更新');
+      console.log(`📊 共加载 ${Object.keys(generateExamplePanelsCode()).length} 个面板配置`);
       break;
     }
 
