@@ -364,12 +364,25 @@ export default {
         const visible = instanceConfig ? instanceConfig.visible : true;
 
         // ⭐ 单例面板：不传递组件实例（组件已在预加载时加载）
+        // ⭐ 关键修复：检查面板是否已经在 PanelSingletonManager 中设置为 visible
+        // 如果用户通过工具栏按钮设置了 visible: true，则保持用户设置
+        let actualVisible = visible;
+        const panelSingletonManager = window.panelSingletonManager || window.__panelSingletonManager__;
+        if (panelSingletonManager) {
+          const existingPanel = panelSingletonManager.getPanel(this.effectiveRegistrationKey);
+          if (existingPanel && existingPanel.visible === true) {
+            // 用户已经设置为可见，保持可见状态
+            actualVisible = true;
+            console.log(`[FunctionPanelUIBase] 🎯 保持用户设置的 visible: true`);
+          }
+        }
+
         this.registerPanelComponent(this.effectiveRegistrationKey, {
           props: mergedProps,
-          visible: visible
+          visible: actualVisible
         });
         this._registryRegistered = true;
-        console.log(`[FunctionPanelUIBase #${this.instanceId}] ${this.effectiveRegistrationKey} 单例注册完成, visible: ${visible}`);
+        console.log(`[FunctionPanelUIBase #${this.instanceId}] ${this.effectiveRegistrationKey} 单例注册完成, visible: ${actualVisible}`);
         return;
       }
 

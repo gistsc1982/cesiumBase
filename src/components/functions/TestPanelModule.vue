@@ -9,7 +9,7 @@
     :initial-y="initialY"
     :allow-minimize="allowMinimize"
     :close-event-name="closeEventName"
-    :auto-register="autoRegister !== false"
+    :auto-register="autoRegister === true"
     :registration-key="registrationKey || 'TestPanelModule'"
     @close="handleClose"
     @minimize="handleMinimize"
@@ -244,95 +244,6 @@ export default {
       this.count++;
     }
   }
-};
-
-// ==================== 静态配置管理方法 ====================
-// 将这些方法作为组件的静态属性，方便通过类名调用
-
-/**
- * 加载面板配置文件（静态方法）
- */
-TestPanelModule.loadPanelConfig = async function() {
-  const { loadPanelConfig } = await import('./PanelConfigManager.js');
-  return await loadPanelConfig();
-};
-
-/**
- * 保存配置到文件（静态方法）
- */
-TestPanelModule.savePanelConfig = function(config, download = false) {
-  return require('./PanelConfigManager.js').savePanelConfig(config, download);
-};
-
-/**
- * 添加单例面板配置（静态方法）
- */
-TestPanelModule.addSingletonPanelConfig = async function(config, saveAndDownload = false) {
-  const { addSingletonPanelConfig } = await import('./PanelConfigManager.js');
-  return await addSingletonPanelConfig(config, saveAndDownload);
-};
-
-/**
- * 添加多实例面板配置（静态方法）
- */
-TestPanelModule.addMultiInstancePanelConfig = async function(config, saveAndDownload = false) {
-  const { addMultiInstancePanelConfig } = await import('./PanelConfigManager.js');
-  return await addMultiInstancePanelConfig(config, saveAndDownload);
-};
-
-/**
- * 同时添加单例和多实例面板配置（静态方法）
- */
-TestPanelModule.addBothPanelConfigs = async function(config, saveAndDownload = false) {
-  const { addBothPanelConfigs } = await import('./PanelConfigManager.js');
-  return await addBothPanelConfigs(config, saveAndDownload);
-};
-
-/**
- * 删除面板配置（静态方法）
- */
-TestPanelModule.removePanelConfig = async function(name, saveAndDownload = false) {
-  const { removePanelConfig } = await import('./PanelConfigManager.js');
-  return await removePanelConfig(name, saveAndDownload);
-};
-
-/**
- * 获取指定面板的配置（静态方法）
- */
-TestPanelModule.getPanelConfig = async function(name) {
-  const { getPanelConfig } = await import('./PanelConfigManager.js');
-  return await getPanelConfig(name);
-};
-
-/**
- * 获取所有面板配置（静态方法）
- */
-TestPanelModule.getAllPanelConfigs = async function() {
-  const { getAllPanelConfigs } = await import('./PanelConfigManager.js');
-  return await getAllPanelConfigs();
-};
-
-/**
- * 获取指定分类的面板配置（静态方法）
- */
-TestPanelModule.getPanelsByCategory = async function(category) {
-  const { getPanelsByCategory } = await import('./PanelConfigManager.js');
-  return await getPanelsByCategory(category);
-};
-
-/**
- * 导出当前配置为 JSON 文件（静态方法）
- */
-TestPanelModule.exportConfigToFile = async function() {
-  const { exportConfigToFile } = await import('./PanelConfigManager.js');
-  return await exportConfigToFile();
-};
-
-/**
- * 生成面板配置的 TypeScript 接口代码（静态方法）
- */
-TestPanelModule.generateConfigInterface = function() {
-  return require('./PanelConfigManager.js').generateConfigInterface();
 };
 </script>
 

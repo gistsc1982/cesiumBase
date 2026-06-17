@@ -48,19 +48,6 @@
         </div>
       </div>
     </div>
-    <!-- dual-canvas-viewer 覆盖层容器 - 独立 Vue 应用挂载点 -->
-    <div
-      id="dualCanvasContainer"
-      ref="dualCanvasContainer"
-      class="dual-canvas-overlay"
-      @mousedown="handleMouseDown"
-      @mousemove="handleMouseMove"
-      @mouseup="handleMouseUp"
-      @wheel="handleWheel"
-      @contextmenu.prevent
-    >
-      <!-- dual-canvas-viewer-plugin 将被动态挂载到这里 -->
-    </div>
 
     <!-- ⭐ Cesium 工具条 -->
     <CesiumToolbar
@@ -299,11 +286,13 @@ async function loadFunctionPanel(componentName) {
     throw new Error(`Panel component is disabled: ${componentName}`);
   }
 
-  // ⭐ 检查是否为 .mjs 类型组件（支持所有 mjs 组件的统一处理）
+  // ⭐ 检查是否为 .mjs 类型组件或 IIFE 全局组件（支持所有 mjs/iife 组件的统一处理）
   const isMjsComponent = panelConfig && panelConfig.file && panelConfig.file.endsWith('.mjs');
+  const isIifeComponent = panelConfig && panelConfig.iifeGlobalVar && panelConfig.singleton !== false;
 
-  if (isMjsComponent) {
-    console.log(`[CesiumMain] 📦 检测到 .mjs 组件: ${componentName}`);
+  if (isMjsComponent || isIifeComponent) {
+    const componentType = isIifeComponent ? 'IIFE 全局' : '.mjs';
+    console.log(`[CesiumMain] 📦 检测到 ${componentType} 组件: ${componentName}`);
     return loadMjsComponent(componentName, panelConfig);
   }
 
@@ -330,8 +319,35 @@ async function loadFunctionPanel(componentName) {
         `${FUNCTION_PANELS_DIR}${panelConfig.file}`
       );
 
-      // 获取组件
-      const component = module.default || module;
+      // ⭐ 调试：检查导入的模块
+      console.log(`[CesiumMain] 🔍 导入的模块 ${componentName}:`, {
+        isModule: module.__esModule,
+        hasDefault: !!module.default,
+        keys: Object.keys(module),
+        defaultKeys: module.default ? Object.keys(module.default) : 'N/A',
+        defaultType: typeof module.default,
+        moduleType: typeof module,
+        // ⭐ 检查模块的属性
+        allProperties: Object.getOwnPropertyNames(module),
+        // ⭐ 检查 Symbol 属性
+        symbolProperties: Object.getOwnPropertySymbols(module),
+        // ⭐ 检查原型
+        protoKeys: Object.keys(Object.getPrototypeOf(module))
+      });
+
+      // ⭐ 如果 module.default 不存在，尝试其他方式获取组件
+      let component = module.default;
+      if (!component) {
+        console.warn(`[CesiumMain] ⚠️ 模块 ${componentName} 没有 .default 属性，尝试其他方式...`);
+        // 尝试直接使用模块对象
+        if (Object.keys(module).length > 0) {
+          component = module;
+          console.log(`[CesiumMain] 🔄 使用模块对象本身作为组件`);
+        } else {
+          console.error(`[CesiumMain] ❌ 无法从模块中提取组件:`, module);
+          throw new Error(`Failed to load component: ${componentName}`);
+        }
+      }
 
       // 缓存组件
       COMPONENT_CACHE.set(componentName, component);
@@ -401,15 +417,23 @@ async function loadMjsComponent(componentName, panelConfig) {
       const Vue = await import('vue');
       const { createApp, h } = Vue;
 
+      // ⭐ 使用与 demo-bundle.html 完全相同的方式
+      // 1. 创建一个空的 Vue 应用
       const app = createApp({
         data() {
           return { loaded: true };
-        },
-        render() {
-          return h(iifeComponent);
         }
       });
 
+      // 2. 注册 DualCanvasViewer 组件（使用组件名，与 demo-bundle.html 一致）
+      const componentTagName = 'dual-canvas-viewer-plugin';
+      app.component(componentTagName, iifeComponent);
+      console.log(`[CesiumMain] ✓ 已注册组件: ${componentTagName}`);
+
+      // 3. 清空容器并添加组件标签
+      container.innerHTML = `<${componentTagName}></${componentTagName}>`;
+
+      // 4. 挂载 Vue 应用
       app.mount(container);
       console.log(`[CesiumMain] ✅ 单例 Vue 应用已挂载: ${componentName} -> ${containerId}`);
     }
@@ -1033,21 +1057,24 @@ export default {
               });
 
               if (instancePanelConfig) {
-                const isVisible = instancePanelConfig.visible;
                 const panelProps = {
                   // 位置配置
                   ...instancePanelConfig.position
                 };
-                console.log(`[CesiumMain #${instanceId}] 📋 预注册面板: ${name}, visible: ${isVisible}, props:`, panelProps);
+                console.log(`[CesiumMain #${instanceId}] 📋 预注册面板: ${name}, props:`, panelProps);
 
                 // ⭐ 跳过 IIFE 全局组件（已经在 loadMjsComponent 中注册）
                 if (component === null) {
                   console.log(`[CesiumMain #${instanceId}] ⏭️ 跳过 IIFE 全局组件注册: ${name}`);
                 } else {
+                  // ⭐ 关键修复：预加载时不传递 visible 参数
+                  // 这样 registerPanelComponent 会使用默认逻辑：
+                  // - 如果面板已经存在，保持现有状态
+                  // - 如果面板不存在，使用配置文件的默认值
                   this.registerPanelComponent(name, {
                     component,
-                    props: panelProps,
-                    visible: isVisible
+                    props: panelProps
+                    // ⭐ 不传递 visible 参数，让 registerPanelComponent 自动处理
                   });
                 }
               } else {
@@ -1206,10 +1233,33 @@ export default {
           ...(config.props || {})
         };
 
-        // ⭐ 优先使用 PanelSingletonManager 中的当前状态，而不是配置文件的初始状态
-        // 这样可以保持用户通过工具栏按钮设置的状态
+        // ⭐ 合并可见性配置（优先级从高到低）：
+        // 1. config.visible - 本次注册明确指定的可见性（用户点击按钮时传入）
+        // 2. currentPanelState?.visible - 已存在的面板状态（保持用户之前设置的状态）
+        // 3. instancePanelConfig.visible - 配置文件中的默认值
+        // 4. 默认值 true（如果没有其他配置，默认可见）
         const currentPanelState = panelSingletonManager.getPanel(key);
-        const mergedVisible = currentPanelState?.visible ?? (instancePanelConfig ? instancePanelConfig.visible : (config.visible !== false));
+
+        // ⭐ 关键修复：如果 config.visible 明确指定为 true 或 false，优先使用
+        // 这样可以确保用户点击按钮时的意图被正确执行
+        let mergedVisible;
+        if (config.visible === true || config.visible === false) {
+          // 明确指定了可见性，优先使用
+          mergedVisible = config.visible;
+          console.log(`[CesiumMain #${instanceId}] 🎯 使用明确的 config.visible: ${mergedVisible}`);
+        } else if (currentPanelState?.visible !== undefined) {
+          // 使用现有的面板状态
+          mergedVisible = currentPanelState.visible;
+          console.log(`[CesiumMain #${instanceId}] 🔄 使用现有面板状态: ${mergedVisible}`);
+        } else if (instancePanelConfig?.visible !== undefined) {
+          // 使用配置文件的默认值
+          mergedVisible = instancePanelConfig.visible;
+          console.log(`[CesiumMain #${instanceId}] 📋 使用配置文件默认值: ${mergedVisible}`);
+        } else {
+          // 默认可见
+          mergedVisible = true;
+          console.log(`[CesiumMain #${instanceId}] ✨ 使用默认值: ${mergedVisible}`);
+        }
 
         // ⭐ 获取组件定义（如果 config.component 不存在，从缓存中获取）
         const component = config.component || this.functionPanelComponents[key];
@@ -1219,16 +1269,38 @@ export default {
           return;
         }
 
+        // ⭐ 调试：检查 component 对象
+        console.log(`[CesiumMain #${instanceId}] 🔍 检查组件 ${key}:`, {
+          isModule: component.__esModule,
+          hasDefault: !!component.default,
+          hasTemplate: !!(component.template || component.render),
+          type: typeof component,
+          keys: Object.keys(component),
+          componentName: component.name || component.__name || 'unknown'
+        });
+
+        // ⭐ 关键修复：如果 component 是 ES Module（有 __esModule 或 default 属性），提取 default
+        let actualComponent = component;
+        if (component.__esModule || (component.default && typeof component.default === 'object')) {
+          actualComponent = component.default || component;
+          console.log(`[CesiumMain #${instanceId}] 🔄 从 Module 提取组件:`, {
+            originalType: typeof component,
+            extractedType: typeof actualComponent,
+            hasDefault: !!component.default,
+            extractedHasTemplate: !!(actualComponent.template || actualComponent.render)
+          });
+        }
+
         // ⭐ 注册到 PanelSingletonManager（统一管理单例面板）
         panelSingletonManager.registerPanel(key, {
-          component: markRaw(component), // 使用 markRaw 避免响应式包装
+          component: markRaw(actualComponent), // 使用 markRaw 避免响应式包装
           props: mergedProps,
           visible: mergedVisible
         });
 
         // ⭐ 同时缓存到本地（用于兼容性）
         this.registeredPanels[key] = {
-          component: markRaw(component),
+          component: markRaw(actualComponent),
           props: mergedProps,
           visible: mergedVisible
         };
@@ -1473,10 +1545,23 @@ export default {
         this.loadFunctionPanel(panelId)
           .then((component) => {
             console.log(`[CesiumMain] ✅ ${panelId} 组件加载完成，开始注册...`);
-            // 组件加载后，需要触发自注册
-            // 由于面板已经渲染，组件的 mounted 钩子会自动注册
+
+            // ⭐ 获取面板配置
+            const panelConfig = getPanelConfig(panelId);
+            const panelProps = {
+              ...(panelConfig?.position || {})
+            };
+
+            // ⭐ 立即注册面板到 PanelSingletonManager（设置 visible: true）
+            // 这样面板就会被渲染，组件的 mounted 钩子才会执行
+            this.registerPanelComponent(panelId, {
+              component,
+              props: panelProps,
+              visible: true  // ⭐ 关键：设置为 true 以触发渲染
+            });
+
             this.$nextTick(() => {
-              console.log(`[CesiumMain] 🎯 ${panelId} 自注册应该已完成`);
+              console.log(`[CesiumMain] 🎯 ${panelId} 已注册并设置为可见`);
             });
           })
           .catch((error) => {
@@ -8888,7 +8973,9 @@ async loadTestSfcComponent(instanceId) {
       }, 100);
     });
 
-    this.initDualCanvasViewer();
+    // ⭐ 已禁用硬编码的 DualCanvasViewer 初始化
+    // 现在通过 SetContentExample 面板系统加载
+    // this.initDualCanvasViewer();
 
     // ⭐ 不在这里直接初始化地板高度面板
     // 改为在 DualCanvasViewerMounted 事件中初始化

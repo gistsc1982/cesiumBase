@@ -16,16 +16,23 @@ const path = require('path');
 // 配置文件路径（从 src/utils 向上两级到 src/components/functions）
 const CONFIG_FILE = path.join(__dirname, '../components/functions/functionPanels.config.json');
 
-// 示例面板配置
+// 示例面板配置（包含单例和多实例的完整配置）
 const EXAMPLE_PANELS = {
   SetContentExample: {
     name: 'SetContentExample',
     file: 'examples/SetContentExample.vue',
-    title: 'SetContent 示例',
-    description: 'TestPanelModule setContent 方法使用示例',
-    icon: '📦',
-    category: 'test',
-    position: { initialX: 'right', initialY: 200 }
+    title: '双画布查看器',
+    description: 'DualCanvasViewerPlugin 单例加载',
+    icon: '🖥️',
+    category: 'tools',
+    // 单例面板位置
+    position: { initialX: 'right', initialY: 0 },
+    // 多实例面板位置
+    multiPosition: { initialX: 'center', initialY: 280 },
+    // 多实例面板图标
+    multiIcon: '🧬',
+    // 多实例面板分类
+    multiCategory: 'test'
   },
   MultiContentExample: {
     name: 'MultiContentExample',
@@ -34,7 +41,14 @@ const EXAMPLE_PANELS = {
     description: 'TestPanelModule 动态切换内容示例',
     icon: '🔄',
     category: 'test',
-    position: { initialX: 'right', initialY: 280 }
+    // 单例面板位置
+    position: { initialX: 'right', initialY: 280 },
+    // 多实例面板位置
+    multiPosition: { initialX: 'center', initialY: 360 },
+    // 多实例面板图标
+    multiIcon: '🔀',
+    // 多实例面板分类（默认与单例相同）
+    multiCategory: 'test'
   },
   SlotExample: {
     name: 'SlotExample',
@@ -43,7 +57,14 @@ const EXAMPLE_PANELS = {
     description: 'TestPanelModule 插槽使用示例',
     icon: '🎨',
     category: 'test',
-    position: { initialX: 'right', initialY: 360 }
+    // 单例面板位置
+    position: { initialX: 'right', initialY: 360 },
+    // 多实例面板位置
+    multiPosition: { initialX: 'center', initialY: 440 },
+    // 多实例面板图标
+    multiIcon: '🖼️',
+    // 多实例面板分类（默认与单例相同）
+    multiCategory: 'test'
   }
 };
 
@@ -128,7 +149,7 @@ function addSingletonPanel(config, panelConfig) {
  * 添加多实例面板配置
  */
 function addMultiInstancePanel(config, panelConfig) {
-  const { name, file, title, description, icon, category } = panelConfig;
+  const { name, file, title, description, multiIcon, multiPosition, multiCategory } = panelConfig;
   const multiInstanceName = `${name}Multi`;
 
   if (panelExists(config, multiInstanceName)) {
@@ -142,11 +163,14 @@ function addMultiInstancePanel(config, panelConfig) {
     description: `${description}（多实例）`,
     enabled: true,
     visible: false,
-    icon: '🧬',
-    category,
+    // 优先使用配置中的多实例图标，否则使用默认图标
+    icon: multiIcon || '🧬',
+    // 优先使用配置中的多实例分类，否则使用单例的分类
+    category: multiCategory || panelConfig.category,
     singleton: false,
     permissions: [],
-    position: { initialX: 'center', initialY: 200 }
+    // 优先使用配置中的多实例位置，否则使用默认位置
+    position: multiPosition || { initialX: 'center', initialY: 200 }
   };
 
   // 移除旧配置（如果存在）
@@ -155,6 +179,7 @@ function addMultiInstancePanel(config, panelConfig) {
   config.panels.push(panel);
 
   // 确保分类存在
+  const category = panel.category;
   if (!config.categories[category]) {
     config.categories[category] = {
       name: category,
