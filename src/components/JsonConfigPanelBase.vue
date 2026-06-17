@@ -436,6 +436,12 @@ export default {
         export: true,
         refresh: true
       })
+    },
+
+    // ⭐ 延迟加载配置：是否在面板第一次打开时才加载配置
+    lazyLoad: {
+      type: Boolean,
+      default: false
     }
   },
 
@@ -494,9 +500,23 @@ export default {
       this.restoreCesiumObjects(savedState.cesiumObjects);
     }
 
+    // ⭐ 检查是否启用延迟加载
+    const config = this.getPanelConfig();
+    const shouldLazyLoad = this.lazyLoad || (config && config.lazyLoad === true);
+
+    if (shouldLazyLoad) {
+      console.log(`[${this.effectivePanelName}] ⏸️ 延迟加载已启用，等待面板首次打开时加载配置`);
+      // 监听父组件（FunctionPanelUIBase）的 lazy-load 事件
+      this.$once('lazy-load', this.onLazyLoad);
+    }
+
     this.initCesium(() => {
-      console.log(`[${this.effectivePanelName}] Cesium 已就绪，开始加载配置`);
-      this.loadConfig();
+      if (!shouldLazyLoad) {
+        console.log(`[${this.effectivePanelName}] Cesium 已就绪，开始加载配置`);
+        this.loadConfig();
+      } else {
+        console.log(`[${this.effectivePanelName}] Cesium 已就绪，等待延迟加载触发`);
+      }
     });
   },
 
@@ -604,6 +624,35 @@ export default {
   },
 
   methods: {
+    // ==================== 延迟加载 ====================
+
+    /**
+     * 获取面板配置（从 functionPanels.config.json）
+     * @returns {Object|null} 面板配置
+     */
+    getPanelConfig() {
+      if (typeof window !== 'undefined' && window.__functionPanelsConfig__) {
+        return window.__functionPanelsConfig__.panels.find(
+          p => p.name === this.effectivePanelName
+        );
+      }
+      return null;
+    },
+
+    /**
+     * 处理延迟加载触发
+     * 当面板首次打开时调用
+     */
+    onLazyLoad(eventData) {
+      console.log(`[${this.panelName}] ⚡ 延迟加载触发，首次打开面板`, eventData);
+
+      // 加载配置
+      this.initCesium(() => {
+        console.log(`[${this.panelName}] Cesium 已就绪，开始延迟加载配置`);
+        this.loadConfig();
+      });
+    },
+
     // ==================== 生命周期钩子（子类覆盖） ====================
 
     initCesium(callback) {

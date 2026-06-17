@@ -154,7 +154,9 @@ export default {
     // 性能优化相关配置
     enableBlur: { type: Boolean, default: false }, // 默认禁用模糊效果
     blurAmount: { type: String, default: '8px' }, // 降低默认模糊值
-    enableBackdropFilter: { type: Boolean, default: false } // 是否启用 backdrop-filter（性能敏感）
+    enableBackdropFilter: { type: Boolean, default: false }, // 是否启用 backdrop-filter（性能敏感）
+    // ⭐ 延迟加载配置：是否在面板第一次打开时才加载内容
+    lazyLoad: { type: Boolean, default: false }
   },
   data() {
     return {
@@ -171,6 +173,8 @@ export default {
       // 面板状态
       isMinimized: false,
       isClosed: true,  // 默认关闭，只有当配置 visible: true 时才打开
+      // ⭐ 延迟加载状态：标记内容是否已加载
+      _contentLoaded: false,
       // 事件处理器引用
       boundMouseMove: null,
       boundMouseUp: null,
@@ -312,6 +316,16 @@ export default {
           if (oldIsClosed && !this.isClosed) {
             this.$forceUpdate();
             console.log(`[FunctionPanelUIBase] ✅ 强制重新渲染面板: ${targetPanelName}`);
+
+            // ⭐ 延迟加载：如果启用了延迟加载且内容未加载，触发内容加载
+            if (this.lazyLoad && !this._contentLoaded) {
+              console.log(`[FunctionPanelUIBase] ⚡ 触发延迟加载: ${targetPanelName}`);
+              this._contentLoaded = true;
+              // 通知子组件加载内容
+              this.$nextTick(() => {
+                this.$emit('lazy-load', { firstOpen: true });
+              });
+            }
           }
         }
       };

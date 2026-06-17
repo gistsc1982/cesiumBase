@@ -398,6 +398,11 @@ export default {
     initialY: {
       type: Number,
       default: 120
+    },
+    // ⭐ 延迟加载配置：是否在面板第一次打开时才加载配置
+    lazyLoad: {
+      type: Boolean,
+      default: false
     }
   },
   data() {
@@ -607,19 +612,32 @@ export default {
       });
     }
 
-    this.initCesium(() => {
-      console.log(`[${this.componentName}] Cesium 已就绪，面板初始化完成`);
+    // ⭐ 检查是否启用延迟加载
+    const shouldLazyLoad = this.lazyLoad || this.getConfigLazyLoad();
 
-      // ⭐ 始终从服务器加载最新数据，不使用单例管理器缓存的数据
-      // 这样确保页面刷新后显示的是最新数据
-      console.log(`[${this.componentName}] 📂 从服务器加载最新配置数据`);
-      this.loadFromJson().then(() => {
-        // 数据加载完成后，如果有保存的 Cesium 对象，恢复它们
-        if (hasCesiumObjects) {
-          console.log(`[${this.componentName}] 🔄 恢复 Cesium 对象状态`);
-          this.restoreCesiumObjects();
-        }
-      });
+    if (shouldLazyLoad) {
+      console.log(`[${this.componentName}] ⏸️ 延迟加载已启用，等待面板首次打开时加载配置`);
+      // 监听父组件（FunctionPanelUIBase）的 lazy-load 事件
+      this.$once('lazy-load', this.onLazyLoad);
+    }
+
+    this.initCesium(() => {
+      if (!shouldLazyLoad) {
+        console.log(`[${this.componentName}] Cesium 已就绪，面板初始化完成`);
+
+        // ⭐ 始终从服务器加载最新数据，不使用单例管理器缓存的数据
+        // 这样确保页面刷新后显示的是最新数据
+        console.log(`[${this.componentName}] 📂 从服务器加载最新配置数据`);
+        this.loadFromJson().then(() => {
+          // 数据加载完成后，如果有保存的 Cesium 对象，恢复它们
+          if (hasCesiumObjects) {
+            console.log(`[${this.componentName}] 🔄 恢复 Cesium 对象状态`);
+            this.restoreCesiumObjects();
+          }
+        });
+      } else {
+        console.log(`[${this.componentName}] Cesium 已就绪，等待延迟加载触发`);
+      }
     });
   },
   beforeUnmount() {
@@ -652,7 +670,50 @@ export default {
     // - _cesiumHeightOffsets（保留高度偏移）
   },
   methods: {
-    handleClose() {
+    // ==================== 延迟加载 ====================
+
+    /**
+     * 获取配置中的延迟加载选项
+     * @returns {boolean} 是否启用延迟加载
+     */
+    getConfigLazyLoad() {
+      if (typeof window !== 'undefined' && window.__functionPanelsConfig__) {
+        const config = window.__functionPanelsConfig__.panels.find(
+          p => p.name === this.componentName
+        );
+        return config ? config.lazyLoad === true : false;
+      }
+      return false;
+    },
+
+    /**
+     * 处理延迟加载触发
+     * 当面板首次打开时调用
+     */
+    onLazyLoad(eventData) {
+      console.log(`[${this.componentName}] ⚡ 延迟加载触发，首次打开面板`, eventData);
+
+      // 检查是否有保存的 Cesium 对象状态
+      const savedState = panelSingletonManager.getPanelState(this.componentName);
+      const hasCesiumObjects = savedState && savedState.cesiumTilesets && savedState.cesiumTilesets.size > 0;
+
+      // 加载配置
+      this.initCesium(() => {
+        console.log(`[${this.componentName}] Cesium 已就绪，开始延迟加载配置`);
+        this.loadFromJson().then(() => {
+          // 数据加载完成后，如果有保存的 Cesium 对象，恢复它们
+          if (hasCesiumObjects) {
+            console.log(`[${this.componentName}] 🔄 恢复 Cesium 对象状态`);
+            this.restoreCesiumObjects();
+          }
+        });
+      });
+    },
+
+    // ==================== 单例模式状态恢复 ====================
+
+    /**
+     * 恢复 Cesium 对象到场景中
       console.log(`[${this.componentName}] 面板假关闭（单实例模式）`);
       // ⭐ 触发自定义事件，通知父组件假关闭（不销毁组件）
       if (typeof window !== 'undefined') {

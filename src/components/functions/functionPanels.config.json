@@ -14,6 +14,7 @@
       "category": "test",
       "singleton": true,
       "singletonContainerId": "contentExample",
+      "lazyLoad": true,
       "permissions": [],
       "position": {
         "initialX": "right",
@@ -31,6 +32,7 @@
       "category": "test",
       "singleton": false,
       "singletonContainerId": "contentExample",
+      "lazyLoad": true,
       "permissions": [],
       "position": {
         "initialX": "center",
@@ -48,6 +50,7 @@
       "category": "tools",
       "singleton": true,
       "singletonContainerId": "obliqueHeightAdjustPanel",
+      "lazyLoad": true,
       "permissions": [],
       "position": {
         "initialX": "right",
@@ -65,6 +68,7 @@
       "category": "tools",
       "singleton": false,
       "singletonContainerId": "obliqueHeightAdjustPanel",
+      "lazyLoad": true,
       "permissions": [],
       "position": {
         "initialX": "right",
@@ -82,6 +86,7 @@
       "category": "tools",
       "singleton": true,
       "singletonContainerId": "obliquePhotographyPanel",
+      "lazyLoad": true,
       "permissions": [],
       "position": {
         "initialX": "center",
@@ -99,6 +104,7 @@
       "category": "tools",
       "singleton": false,
       "singletonContainerId": "obliquePhotographyPanel",
+      "lazyLoad": true,
       "permissions": [],
       "position": {
         "initialX": "center",
@@ -108,7 +114,7 @@
     {
       "name": "ObliquePhotographyPanelExample",
       "file": "ObliquePhotographyPanelExample.vue",
-      "title": "测试面板",
+      "title": "继承JsonConfigPanelBase实现ObliquePhotographyPanel",
       "description": "测试 JsonConfigPanelBase（单例模式）",
       "enabled": true,
       "visible": false,
@@ -116,6 +122,7 @@
       "category": "test",
       "singleton": true,
       "singletonContainerId": "obliquePhotographyPanelExample",
+      "lazyLoad": true,
       "permissions": [],
       "position": {
         "initialX": "left",
@@ -125,14 +132,15 @@
     {
       "name": "ObliquePhotographyPanelExampleMulti",
       "file": "ObliquePhotographyPanelExample.vue",
-      "title": "JsonConfigPanelBase（多实例）",
-      "description": "JsonConfigPanelBase（多实例）",
+      "title": "继承JsonConfigPanelBase实现ObliquePhotographyPanel（多实例）",
+      "description": "继承JsonConfigPanelBase实现ObliquePhotographyPanel（多实例）",
       "enabled": true,
       "visible": false,
       "icon": "🧪",
       "category": "test",
       "singleton": false,
       "singletonContainerId": "obliquePhotographyPanelExample",
+      "lazyLoad": true,
       "permissions": [],
       "position": {
         "initialX": "left",
@@ -150,6 +158,7 @@
       "category": "test",
       "singleton": true,
       "singletonContainerId": "setContentExample",
+      "lazyLoad": true,
       "permissions": [],
       "position": {
         "initialX": "right",
@@ -167,6 +176,7 @@
       "category": "test",
       "singleton": false,
       "singletonContainerId": "setContentExample",
+      "lazyLoad": true,
       "permissions": [],
       "position": {
         "initialX": "center",
@@ -184,6 +194,7 @@
       "category": "test",
       "singleton": true,
       "singletonContainerId": "slotExample",
+      "lazyLoad": true,
       "permissions": [],
       "position": {
         "initialX": "right",
@@ -201,6 +212,7 @@
       "category": "test",
       "singleton": false,
       "singletonContainerId": "slotExample",
+      "lazyLoad": true,
       "permissions": [],
       "position": {
         "initialX": "center",
@@ -218,6 +230,7 @@
       "category": "test",
       "singleton": true,
       "singletonContainerId": "testPanel",
+      "lazyLoad": true,
       "permissions": [],
       "position": {
         "initialX": "left",
@@ -235,6 +248,7 @@
       "category": "test",
       "singleton": false,
       "singletonContainerId": "testPanel",
+      "lazyLoad": true,
       "permissions": [],
       "position": {
         "initialX": "left",
@@ -252,6 +266,7 @@
       "category": "test",
       "singleton": true,
       "singletonContainerId": "testPanelModule",
+      "lazyLoad": true,
       "permissions": [],
       "position": {
         "initialX": "left",
@@ -269,6 +284,7 @@
       "category": "test",
       "singleton": false,
       "singletonContainerId": "testPanelModule",
+      "lazyLoad": true,
       "permissions": [],
       "position": {
         "initialX": "left",
@@ -286,6 +302,7 @@
       "category": "tools",
       "singleton": true,
       "singletonContainerId": "dualCanvasContainer",
+      "lazyLoad": true,
       "permissions": [],
       "position": {
         "initialX": "center",
@@ -303,6 +320,7 @@
       "category": "tools",
       "singleton": false,
       "singletonContainerId": "dualCanvasContainer",
+      "lazyLoad": true,
       "permissions": [],
       "position": {
         "initialX": "center",
