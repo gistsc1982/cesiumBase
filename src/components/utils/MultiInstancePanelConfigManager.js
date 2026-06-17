@@ -396,29 +396,38 @@ class MultiInstancePanelConfigManager {
     const instanceKey = this._generateInstanceKey(instanceId, panelName, panelInstanceId);
 
     // 计算位置偏移（如果是多实例面板）
-    const position = config.props?.position || this._calculateMultiInstancePanelPosition(
+    // ⭐ 修复：直接展开位置属性，而不是嵌套在 position 对象中
+    const { initialX, initialY } = config.props?.position || this._calculateMultiInstancePanelPosition(
       instanceId,
       panelName,
       panelInstanceId,
       config.props
     );
 
+    const props = {
+      ...config.props,
+      initialX,
+      initialY
+    };
+
+    // ⭐ 移除嵌套的 position 对象（如果存在）
+    delete props.position;
+
     this.panelInstances.set(instanceKey, {
       instanceId,
       panelName,
       panelInstanceId,
       component: config.component,
-      props: {
-        ...config.props,
-        position
-      },
+      props: props,
       visible: config.visible !== false,
       createdAt: Date.now()
     });
 
     console.log(`[MultiInstancePanelConfigManager] ✅ 注册面板实例: ${instanceKey}`, {
-      位置: position,
-      可见: this.panelInstances.get(instanceKey).visible
+      位置: { initialX, initialY },
+      可见: this.panelInstances.get(instanceKey).visible,
+      props: props,
+      propsPanelInstanceId: props.panelInstanceId
     });
 
     return instanceKey;

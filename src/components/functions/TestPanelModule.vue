@@ -11,6 +11,7 @@
     :close-event-name="closeEventName"
     :auto-register="autoRegister === true"
     :registration-key="registrationKey || 'TestPanelModule'"
+    :panel-instance-id="panelInstanceId"
     @close="handleClose"
     @minimize="handleMinimize"
     @expand="handleExpand"

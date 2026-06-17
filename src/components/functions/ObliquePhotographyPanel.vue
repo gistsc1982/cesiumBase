@@ -9,6 +9,9 @@
     :initial-x="initialX"
     :initial-y="initialY"
     :allow-minimize="true"
+    :registration-key="registrationKey || 'ObliquePhotographyPanel'"
+    :panel-instance-id="panelInstanceId"
+    :auto-register="autoRegister !== undefined ? autoRegister : true"
     close-event-name="obliquePhotographyPanelClose"
     @close="handleClose"
     @minimize="handleMinimize"
@@ -375,6 +378,19 @@ export default {
   },
   mixins: [SfcBase],
   props: {
+    // ⭐ 接收多实例面板的属性
+    registrationKey: {
+      type: String,
+      default: 'ObliquePhotographyPanel'
+    },
+    panelInstanceId: {
+      type: Number,
+      default: null
+    },
+    autoRegister: {
+      type: Boolean,
+      default: true
+    },
     initialX: {
       type: [Number, String],
       default: 'center'

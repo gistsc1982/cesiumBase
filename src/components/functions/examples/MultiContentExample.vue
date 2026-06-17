@@ -2,8 +2,12 @@
   <TestPanelModule
     ref="panel"
     title="多内容面板"
-    :auto-register="true"
-    registration-key="MultiContentExample"
+    :auto-register="autoRegister !== undefined ? autoRegister : true"
+    :registration-key="registrationKey || 'MultiContentExample'"
+    :panel-instance-id="panelInstanceId"
+    :initial-x="initialX"
+    :initial-y="initialY"
+    v-bind="$attrs"
   >
     <template #toolbar-extra>
       <button @click="switchToHeightPanel">高度调整</button>
@@ -21,6 +25,29 @@ export default {
   name: 'MultiContentExample',
   components: {
     TestPanelModule
+  },
+  props: {
+    // ⭐ 接收多实例面板的属性
+    registrationKey: {
+      type: String,
+      default: 'MultiContentExample'
+    },
+    panelInstanceId: {
+      type: Number,
+      default: null
+    },
+    autoRegister: {
+      type: Boolean,
+      default: true
+    },
+    initialX: {
+      type: [Number, String],
+      default: 'center'
+    },
+    initialY: {
+      type: Number,
+      default: 280
+    }
   },
   data() {
     return {

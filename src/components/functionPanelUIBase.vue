@@ -207,13 +207,25 @@ export default {
       return this.panelInstanceId === null || this.panelInstanceId === undefined;
     },
     panelStyles() {
-      return {
+      const styles = {
         width: typeof this.width === 'number' ? `${this.width}px` : this.width,
         height: typeof this.height === 'number' ? `${this.height}px` : this.height,
         maxHeight: typeof this.maxHeight === 'number' ? `${this.maxHeight}px` : this.maxHeight,
         transform: `translate(${this.x}px, ${this.y}px)`,
         transition: this.isDragging ? 'none' : 'transform 0.2s ease-out, opacity 0.3s ease'
       };
+
+      // 只在调试模式下输出日志（避免过多日志）
+      if (this.panelInstanceId === 1 || this.panelInstanceId === 2) {
+        console.log(`[FunctionPanelUIBase] 🎨 面板样式: ${this.effectiveRegistrationKey} #${this.panelInstanceId || 'singleton'}`, {
+          ...styles,
+          isClosed: this.isClosed,
+          x: this.x,
+          y: this.y
+        });
+      }
+
+      return styles;
     },
     bodyStyles() {
       return {
@@ -227,48 +239,84 @@ export default {
     }
   },
   mounted() {
+    // 🔍 调试：打印所有接收到的 props
+    console.log(`[FunctionPanelUIBase] 🔍 接收到的 props:`, {
+      panelName: this.componentName || this.effectiveRegistrationKey,
+      所有Props: {
+        autoRegister: this.autoRegister,
+        registrationKey: this.registrationKey,
+        panelInstanceId: this.panelInstanceId,
+        componentName: this.componentName,
+        title: this.title,
+        initialX: this.initialX,
+        initialY: this.initialY,
+        registrationKey_value: this.registrationKey,
+        effectiveRegistrationKey: this.effectiveRegistrationKey
+      }
+    });
+
     // 自注册逻辑 - 检查是否已注册，避免重复注册
     // 使用 effectiveRegistrationKey，因为即使没有传递 registrationKey，也可以使用 componentName
     if (this.autoRegister && this.effectiveRegistrationKey && !this._registryRegistered) {
       this.registerToParent();
     }
 
-    // ⭐ 从 PanelSingletonManager 同步 isClosed 状态
-    // 无论注册表中的 isClosed 是什么值，都同步到组件
-    const panelName = this.effectiveRegistrationKey;
-    if (panelSingletonManager.hasPanel(panelName)) {
-      const panel = panelSingletonManager.getPanel(panelName);
-      if (panel) {
-        const oldIsClosed = this.isClosed;
-        this.isClosed = panel.isClosed;
-        console.log(`[FunctionPanelUIBase] 🔓 从 PanelSingletonManager 同步面板状态: ${panelName}, isClosed: ${oldIsClosed} -> ${this.isClosed}`);
+    // ⭐ 判断是否为多实例面板
+    const isMultiInstance = this.panelInstanceId !== null;
+
+    console.log(`[FunctionPanelUIBase] 🔍 多实例面板检查:`, {
+      panelName: this.effectiveRegistrationKey,
+      panelInstanceId: this.panelInstanceId,
+      isMultiInstance: isMultiInstance,
+      typeofPanelInstanceId: typeof this.panelInstanceId
+    });
+
+    // ⭐ 从 PanelSingletonManager 同步 isClosed 状态（仅限单例面板）
+    // 多实例面板不应该从 PanelSingletonManager 同步状态，因为它们由 MultiInstancePanelConfigManager 管理
+    if (!isMultiInstance) {
+      const panelName = this.effectiveRegistrationKey;
+      if (panelSingletonManager.hasPanel(panelName)) {
+        const panel = panelSingletonManager.getPanel(panelName);
+        if (panel) {
+          const oldIsClosed = this.isClosed;
+          this.isClosed = panel.isClosed;
+          console.log(`[FunctionPanelUIBase] 🔓 从 PanelSingletonManager 同步面板状态: ${panelName}, isClosed: ${oldIsClosed} -> ${this.isClosed}`);
+        }
       }
+    } else {
+      // ⭐ 多实例面板：默认显示（因为它们被创建时就是可见的）
+      const oldIsClosed = this.isClosed;
+      this.isClosed = false;
+      console.log(`[FunctionPanelUIBase] ✅ 多实例面板默认显示: ${this.effectiveRegistrationKey} #${this.panelInstanceId}, isClosed: ${oldIsClosed} -> ${this.isClosed}`);
     }
 
     // ⭐ 添加事件监听器，监听 PanelSingletonManager 中的状态变化
     // （单例面板组件不会被销毁，需要持续同步状态）
-    this._panelStateChangeListener = (eventData) => {
-      // ⭐ 检查事件是否针对当前面板实例
-      // 优先匹配 registrationKey（如果有），其次匹配 componentName
-      const targetPanelName = this.effectiveRegistrationKey;
-      if (eventData.panelName !== targetPanelName) {
-        return; // 不是当前面板的事件，忽略
-      }
-      console.log(`[FunctionPanelUIBase] 🔔 监听到 PanelSingletonManager 事件: ${targetPanelName}`, eventData);
-      if (eventData.type === 'visibleChange') {
-        // ⭐ 强制更新 isClosed 状态，不进行条件检查
-        const oldIsClosed = this.isClosed;
-        this.isClosed = eventData.isClosed;
-        console.log(`[FunctionPanelUIBase] 🔄 更新 isClosed 状态: ${oldIsClosed} -> ${this.isClosed}`);
-
-        // ⭐ 如果面板从关闭变为打开，强制 Vue 更新
-        if (oldIsClosed && !this.isClosed) {
-          this.$forceUpdate();
-          console.log(`[FunctionPanelUIBase] ✅ 强制重新渲染面板: ${targetPanelName}`);
+    // 多实例面板不需要监听 PanelSingletonManager 事件
+    if (!isMultiInstance) {
+      this._panelStateChangeListener = (eventData) => {
+        // ⭐ 检查事件是否针对当前面板实例
+        // 优先匹配 registrationKey（如果有），其次匹配 componentName
+        const targetPanelName = this.effectiveRegistrationKey;
+        if (eventData.panelName !== targetPanelName) {
+          return; // 不是当前面板的事件，忽略
         }
-      }
-    };
-    panelSingletonManager.addEventListener(panelName, this._panelStateChangeListener);
+        console.log(`[FunctionPanelUIBase] 🔔 监听到 PanelSingletonManager 事件: ${targetPanelName}`, eventData);
+        if (eventData.type === 'visibleChange') {
+          // ⭐ 强制更新 isClosed 状态，不进行条件检查
+          const oldIsClosed = this.isClosed;
+          this.isClosed = eventData.isClosed;
+          console.log(`[FunctionPanelUIBase] 🔄 更新 isClosed 状态: ${oldIsClosed} -> ${this.isClosed}`);
+
+          // ⭐ 如果面板从关闭变为打开，强制 Vue 更新
+          if (oldIsClosed && !this.isClosed) {
+            this.$forceUpdate();
+            console.log(`[FunctionPanelUIBase] ✅ 强制重新渲染面板: ${targetPanelName}`);
+          }
+        }
+      };
+      panelSingletonManager.addEventListener(this.effectiveRegistrationKey, this._panelStateChangeListener);
+    }
 
     this.initCesium(() => {
       this.$nextTick(() => {
@@ -295,10 +343,11 @@ export default {
       document.removeEventListener('keydown', this.boundHandleKeydown);
     }
 
-    // ⭐ 移除 PanelSingletonManager 事件监听器
-    const panelName = this.effectiveRegistrationKey;
-    if (this._panelStateChangeListener) {
-      panelSingletonManager.removeEventListener(panelName, this._panelStateChangeListener);
+    // ⭐ 移除 PanelSingletonManager 事件监听器（仅限单例面板）
+    // 多实例面板不需要监听 PanelSingletonManager 事件
+    const isMultiInstance = this.panelInstanceId !== null;
+    if (!isMultiInstance && this._panelStateChangeListener) {
+      panelSingletonManager.removeEventListener(this.effectiveRegistrationKey, this._panelStateChangeListener);
     }
 
     this.cleanup();
@@ -475,18 +524,30 @@ export default {
      * 初始化面板位置
      */
     initPosition() {
+      console.log(`[FunctionPanelUIBase] 🔧 初始化面板位置: ${this.effectiveRegistrationKey} #${this.panelInstanceId || 'singleton'}`, {
+        initialX: this.initialX,
+        initialY: this.initialY,
+        panelRef: !!this.$refs.panelRef,
+        windowInnerWidth: window.innerWidth,
+        windowInnerHeight: window.innerHeight,
+        panelWidth: this.width
+      });
+
       let x = this.initialX;
 
       if (x === 'center') {
         const panel = this.$refs.panelRef;
         const panelWidth = panel ? panel.offsetWidth : this.width;
         x = Math.round((window.innerWidth - panelWidth) / 2);
+        console.log(`[FunctionPanelUIBase] 📍 居中计算:`, { panelWidth, calculatedX: x });
       } else if (x === 'right') {
         const panel = this.$refs.panelRef;
         const panelWidth = panel ? panel.offsetWidth : this.width;
         x = Math.round(window.innerWidth - panelWidth - 20);
+        console.log(`[FunctionPanelUIBase] 📍 右侧对齐计算:`, { panelWidth, calculatedX: x });
       } else if (typeof x !== 'number') {
         x = 20;
+        console.log(`[FunctionPanelUIBase] 📍 使用默认 x 值: 20`);
       }
 
       // 确保 x 在可见范围内
@@ -494,6 +555,12 @@ export default {
 
       this.x = x;
       this.y = Math.max(20, Math.min(this.initialY, window.innerHeight - 100));
+
+      console.log(`[FunctionPanelUIBase] ✅ 面板位置已设置: ${this.effectiveRegistrationKey} #${this.panelInstanceId || 'singleton'}`, {
+        x: this.x,
+        y: this.y,
+        transform: `translate(${this.x}px, ${this.y}px)`
+      });
     },
 
     /**

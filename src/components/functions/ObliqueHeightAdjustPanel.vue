@@ -8,8 +8,9 @@
     :initial-y="initialY"
     :allow-minimize="true"
     close-event-name="obliqueHeightAdjustPanelClose"
-    :auto-register="false"
-    registration-key="ObliqueHeightAdjustPanel"
+    :auto-register="autoRegister !== undefined ? autoRegister : false"
+    :registration-key="registrationKey || 'ObliqueHeightAdjustPanel'"
+    :panel-instance-id="panelInstanceId"
     @close="handleClose"
     @minimize="handleMinimize"
     @expand="handleExpand"
@@ -146,6 +147,19 @@ export default {
   },
   mixins: [SfcBase],
   props: {
+    // ⭐ 接收多实例面板的属性
+    registrationKey: {
+      type: String,
+      default: 'ObliqueHeightAdjustPanel'
+    },
+    panelInstanceId: {
+      type: Number,
+      default: null
+    },
+    autoRegister: {
+      type: Boolean,
+      default: false
+    },
     // 初始位置配置
     initialX: {
       type: [Number, String],

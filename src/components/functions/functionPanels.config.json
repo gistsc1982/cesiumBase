@@ -4,35 +4,71 @@
   "lastUpdated": "2026-06-17",
   "panels": [
     {
-      "name": "TestPanel",
-      "file": "TestPanel.vue",
-      "title": "TestPanel（单例）",
-      "description": "TestPanel（单例）",
+      "name": "MultiContentExample",
+      "file": "examples/MultiContentExample.vue",
+      "title": "多内容切换示例",
+      "description": "TestPanelModule 动态切换内容示例（单例模式）",
       "enabled": true,
       "visible": true,
-      "icon": "🧪",
+      "icon": "🔄",
       "category": "test",
       "singleton": true,
+      "singletonContainerId": "contentExample",
       "permissions": [],
       "position": {
-        "initialX": "left",
+        "initialX": "right",
+        "initialY": 280
+      }
+    },
+    {
+      "name": "MultiContentExampleMulti",
+      "file": "examples/MultiContentExample.vue",
+      "title": "多内容切换示例（多实例）",
+      "description": "TestPanelModule 动态切换内容示例（多实例）",
+      "enabled": true,
+      "visible": false,
+      "icon": "🔀",
+      "category": "test",
+      "singleton": false,
+      "singletonContainerId": "contentExample",
+      "permissions": [],
+      "position": {
+        "initialX": "center",
+        "initialY": 360
+      }
+    },
+    {
+      "name": "ObliqueHeightAdjustPanel",
+      "file": "ObliqueHeightAdjustPanel.vue",
+      "title": "高度调整面板",
+      "description": "倾斜摄影高度偏移调整面板（单例模式）",
+      "enabled": true,
+      "visible": false,
+      "icon": "📏",
+      "category": "tools",
+      "singleton": true,
+      "singletonContainerId": "obliqueHeightAdjustPanel",
+      "permissions": [],
+      "position": {
+        "initialX": "right",
         "initialY": 100
       }
     },
     {
-      "name": "TestPanelMulti",
-      "file": "TestPanel.vue",
-      "title": "TestPanel（多实例）",
-      "description": "TestPanel（多实例）",
+      "name": "ObliqueHeightAdjustPanelMulti",
+      "file": "ObliqueHeightAdjustPanel.vue",
+      "title": "高度调整面板（多实例）",
+      "description": "倾斜摄影高度偏移调整面板（多实例）",
       "enabled": true,
-      "visible": true,
-      "icon": "🧪",
-      "category": "test",
+      "visible": false,
+      "icon": "📐",
+      "category": "tools",
       "singleton": false,
+      "singletonContainerId": "obliqueHeightAdjustPanel",
       "permissions": [],
       "position": {
-        "initialX": "left",
-        "initialY": 100
+        "initialX": "right",
+        "initialY": 180
       }
     },
     {
@@ -45,6 +81,7 @@
       "icon": "📷",
       "category": "tools",
       "singleton": true,
+      "singletonContainerId": "obliquePhotographyPanel",
       "permissions": [],
       "position": {
         "initialX": "center",
@@ -57,14 +94,15 @@
       "title": "倾斜摄影面板（多实例）",
       "description": "倾斜摄影模型加载和管理面板（多实例）",
       "enabled": true,
-      "visible": true,
+      "visible": false,
       "icon": "📷",
       "category": "tools",
       "singleton": false,
+      "singletonContainerId": "obliquePhotographyPanel",
       "permissions": [],
       "position": {
         "initialX": "center",
-        "initialY": 120
+        "initialY": 200
       }
     },
     {
@@ -77,6 +115,7 @@
       "icon": "🧪",
       "category": "test",
       "singleton": true,
+      "singletonContainerId": "obliquePhotographyPanelExample",
       "permissions": [],
       "position": {
         "initialX": "left",
@@ -89,10 +128,11 @@
       "title": "JsonConfigPanelBase（多实例）",
       "description": "JsonConfigPanelBase（多实例）",
       "enabled": true,
-      "visible": true,
+      "visible": false,
       "icon": "🧪",
       "category": "test",
       "singleton": false,
+      "singletonContainerId": "obliquePhotographyPanelExample",
       "permissions": [],
       "position": {
         "initialX": "left",
@@ -100,39 +140,6 @@
       }
     },
     {
-      "name": "DualCanvasViewerMulti",
-      "file": "test-sfc/sfcLib/dist/dual-canvas-viewer-sfc/lib/dual-canvas-viewer.mjs",
-      "title": "双画布查看器",
-      "description": "双画布查看器（多实例模式）",
-      "enabled": true,
-      "visible": false,
-      "icon": "🧬",
-      "category": "tools",
-      "singleton": false,
-      "singletonContainerId": "dualCanvasContainer",
-      "permissions": [],
-      "position": {
-        "initialX": "center",
-        "initialY": 100
-      }
-    },
-    {
-      "name": "MultiContentExample",
-      "file": "examples/MultiContentExample.vue",
-      "title": "多内容切换示例",
-      "description": "TestPanelModule 动态切换内容示例",
-      "enabled": true,
-      "visible": true,
-      "icon": "🔄",
-      "category": "test",
-      "singleton": true,
-      "permissions": [],
-      "position": {
-        "initialX": "right",
-        "initialY": 280
-      }
-    },
-     {
       "name": "SetContentExample",
       "file": "examples/SetContentExample.vue",
       "title": "SetContent 示例",
@@ -142,6 +149,7 @@
       "icon": "📦",
       "category": "test",
       "singleton": true,
+      "singletonContainerId": "setContentExample",
       "permissions": [],
       "position": {
         "initialX": "right",
@@ -154,10 +162,11 @@
       "title": "SetContent 示例（多实例）",
       "description": "TestPanelModule setContent 方法使用示例（多实例模式）",
       "enabled": true,
-      "visible": true,
+      "visible": false,
       "icon": "🧬",
       "category": "test",
       "singleton": false,
+      "singletonContainerId": "setContentExample",
       "permissions": [],
       "position": {
         "initialX": "center",
@@ -174,6 +183,7 @@
       "icon": "🎨",
       "category": "test",
       "singleton": true,
+      "singletonContainerId": "slotExample",
       "permissions": [],
       "position": {
         "initialX": "right",
@@ -186,14 +196,117 @@
       "title": "插槽示例（多实例）",
       "description": "TestPanelModule 插槽使用示例（多实例）",
       "enabled": true,
-      "visible": true,
+      "visible": false,
       "icon": "🧬",
       "category": "test",
       "singleton": false,
+      "singletonContainerId": "slotExample",
       "permissions": [],
       "position": {
         "initialX": "center",
         "initialY": 200
+      }
+    },
+    {
+      "name": "TestPanel",
+      "file": "TestPanel.vue",
+      "title": "TestPanel（单例）",
+      "description": "TestPanel（单例）",
+      "enabled": true,
+      "visible": true,
+      "icon": "🧪",
+      "category": "test",
+      "singleton": true,
+      "singletonContainerId": "testPanel",
+      "permissions": [],
+      "position": {
+        "initialX": "left",
+        "initialY": 100
+      }
+    },
+    {
+      "name": "TestPanelMulti",
+      "file": "TestPanel.vue",
+      "title": "TestPanel（多实例）",
+      "description": "TestPanel（多实例）",
+      "enabled": true,
+      "visible": false,
+      "icon": "🧪",
+      "category": "test",
+      "singleton": false,
+      "singletonContainerId": "testPanel",
+      "permissions": [],
+      "position": {
+        "initialX": "left",
+        "initialY": 100
+      }
+    },
+    {
+      "name": "TestPanelModule",
+      "file": "TestPanelModule.vue",
+      "title": "面板模板",
+      "description": "可复用的面板模板（单例模式）",
+      "enabled": true,
+      "visible": false,
+      "icon": "📦",
+      "category": "test",
+      "singleton": true,
+      "singletonContainerId": "testPanelModule",
+      "permissions": [],
+      "position": {
+        "initialX": "left",
+        "initialY": 140
+      }
+    },
+    {
+      "name": "TestPanelModuleMulti",
+      "file": "TestPanelModule.vue",
+      "title": "面板模板（多实例）",
+      "description": "可复用的面板模板（多实例）",
+      "enabled": true,
+      "visible": false,
+      "icon": "📋",
+      "category": "test",
+      "singleton": false,
+      "singletonContainerId": "testPanelModule",
+      "permissions": [],
+      "position": {
+        "initialX": "left",
+        "initialY": 220
+      }
+    },
+    {
+      "name": "DualCanvasViewer",
+      "file": "test-sfc/sfcLib/dist/dual-canvas-viewer-sfc/lib/dual-canvas-viewer.mjs",
+      "title": "mjs双画布查看器",
+      "description": "mjs双画布查看器（单实例）",
+      "enabled": true,
+      "visible": false,
+      "icon": "🧬",
+      "category": "tools",
+      "singleton": true,
+      "singletonContainerId": "dualCanvasContainer",
+      "permissions": [],
+      "position": {
+        "initialX": "center",
+        "initialY": 100
+      }
+    },
+      {
+      "name": "DualCanvasViewerMulti",
+      "file": "test-sfc/sfcLib/dist/dual-canvas-viewer-sfc/lib/dual-canvas-viewer.mjs",
+      "title": "mjs双画布查看器",
+      "description": "双画布查看器（多实例模式）",
+      "enabled": true,
+      "visible": false,
+      "icon": "🧬",
+      "category": "tools",
+      "singleton": false,
+      "singletonContainerId": "dualCanvasContainer",
+      "permissions": [],
+      "position": {
+        "initialX": "center",
+        "initialY": 100
       }
     }
   ],

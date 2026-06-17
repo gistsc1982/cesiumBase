@@ -847,7 +847,19 @@ export default {
 
       // 2. 从 MultiInstancePanelConfigManager 获取动态面板实例（多实例模式）
       const dynamicInstances = multiInstancePanelConfigManager.getVisiblePanelInstances(instanceId);
+      console.log(`[CesiumMain #${instanceId}] 🔍 多实例面板实例:`, dynamicInstances.map(i => ({
+        key: `${i.panelName}_${i.panelInstanceId}`,
+        panelInstanceId: i.panelInstanceId,
+        props: JSON.parse(JSON.stringify(i.props)), // 深度拷贝以便展开
+        propsPanelInstanceId: i.props?.panelInstanceId,
+        propsKeys: Object.keys(i.props || {})
+      })));
+
       for (const instance of dynamicInstances) {
+        console.log(`[CesiumMain #${instanceId}] 📋 准备渲染面板: ${instance.panelName}_${instance.panelInstanceId}`, {
+          props: JSON.parse(JSON.stringify(instance.props)),
+          component: instance.component ? 'loaded' : 'null'
+        });
         panels.push({
           key: `${instance.panelName}_${instance.panelInstanceId}`, // 唯一键
           component: instance.component,
@@ -913,11 +925,43 @@ export default {
           config.file?.endsWith('.mjs') && config.singleton !== false
         );
 
-        console.log(`[CesiumMain] 📦 注册 ${mjsSingletonPanels.length} 个 mjs 单例容器`);
+        console.log(`[CesiumMain] 📦 注册 ${mjsSingletonPanels.length} 个 mjs 单例容器`, {
+          面板列表: mjsSingletonPanels.map(p => p.name)
+        });
 
         for (const config of mjsSingletonPanels) {
-          // ⭐ 使用 PanelSingletonManager 的方法生成容器 ID
-          const containerId = panelSingletonManager.getMjsContainerId(config.name);
+          // ⭐ 验证：单例模式必须配置 singletonContainerId
+          if (!config.singletonContainerId) {
+            console.error(`[CesiumMain] ❌ 单例 mjs 组件缺少 singletonContainerId 配置: ${config.name}`);
+            continue;
+          }
+
+          const containerId = config.singletonContainerId;
+
+          // ⭐ 创建 DOM 容器（如果不存在）
+          let container = document.getElementById(containerId);
+          if (!container) {
+            container = document.createElement('div');
+            container.id = containerId;
+            container.className = 'dual-canvas-overlay';
+            // 设置初始样式
+            container.style.cssText = `
+              position: fixed;
+              top: 0;
+              left: 0;
+              width: 100vw;
+              height: 100vh;
+              z-index: 99995;
+              pointer-events: auto;
+              background: transparent;
+            `;
+            // 根据配置设置初始可见性
+            if (config.visible === false) {
+              container.classList.add('hidden');
+            }
+            document.body.appendChild(container);
+            console.log(`[CesiumMain] ✅ 创建 mjs 容器: ${config.name} -> ${containerId}`);
+          }
 
           panelSingletonManager.registerMjsContainer(config.name, {
             containerId,
@@ -925,15 +969,6 @@ export default {
             visible: config.visible !== false,
             isClosed: config.visible === false
           });
-
-          // ⭐ 如果配置中可见，确保容器没有 hidden 类
-          if (config.visible !== false) {
-            const container = document.getElementById(containerId);
-            if (container) {
-              container.classList.remove('hidden');
-              console.log(`[CesiumMain] ✅ 移除 hidden 类，设置 mjs 容器可见: ${config.name} (${containerId})`);
-            }
-          }
 
           console.log(`[CesiumMain] ✅ 注册 mjs 容器: ${config.name} -> ${containerId}, visible: ${config.visible !== false}`);
 

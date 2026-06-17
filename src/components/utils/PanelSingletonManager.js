@@ -526,7 +526,25 @@ class PanelSingletonManager {
       return;
     }
 
+    console.log(`[PanelSingletonManager] 🔍 查找容器: ${panelName}`, {
+      containerId: containerConfig.containerId,
+      iifeGlobalVar: containerConfig.iifeGlobalVar,
+      当前可见性: containerConfig.visible
+    });
+
     const container = document.getElementById(containerConfig.containerId);
+
+    if (!container) {
+      console.error(`[PanelSingletonManager] ❌ 容器未找到: ${containerConfig.containerId}`);
+      console.log(`[PanelSingletonManager] 🔍 当前页面所有包含 'dual' 的容器:`,
+        Array.from(document.querySelectorAll('[id*="dual"], [class*="dual"]')).map(el => ({
+          id: el.id,
+          class: el.className,
+          display: window.getComputedStyle(el).display
+        }))
+      );
+      return;
+    }
     if (!container) {
       console.warn(`[PanelSingletonManager] ⚠️ mjs 容器 DOM 不存在: ${containerConfig.containerId}`);
       return;
