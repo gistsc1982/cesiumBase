@@ -12,19 +12,53 @@ export default {
     isClosed: {
       type: Boolean,
       default: true  // 默认关闭，只有明确接收到 isClosed: false 时才初始化
+    },
+    // 多实例面板ID（支持多实例调用）
+    panelInstanceId: {
+      type: Number,
+      default: null
+    },
+    // ⭐ 基于配置文件的单例/多实例模式判断（来自 functionPanels.config.json）
+    isSingleton: {
+      type: Boolean,
+      default: true  // 默认为单例模式
     }
   },
   data() {
     return {
-      containerId: 'set-content-mjs-dual-canvas-container',
       vueApp: null,
       isMounted: false,
       hasInitializedOnce: false,
       mjsComponent: null  // 保存 MJS 组件引用
     };
   },
+  computed: {
+    /**
+     * ⭐ 使用 isSingleton 配置判断模式，生成唯一的容器ID
+     * - 单例模式 (isSingleton = true): 使用 baseId
+     * - 多实例模式 (isSingleton = false): 使用 baseId-panelInstanceId
+     */
+    containerId() {
+      const baseId = 'set-content-mjs-dual-canvas-container';
+      // 多实例模式且 panelInstanceId 不为空时，添加后缀
+      if (!this.isSingleton && this.panelInstanceId !== null) {
+        return `${baseId}-${this.panelInstanceId}`;
+      }
+      return baseId;
+    },
+    closeBtnId() {
+      return `${this.containerId}-close`;
+    },
+    /**
+     * ⭐ 多实例模式判断（基于配置文件）
+     * 与 isSingleton 相反
+     */
+    isMultiInstance() {
+      return !this.isSingleton;
+    }
+  },
   created() {
-    console.log('[SetContentMjsExampleContent] ✅ 组件已创建, isClosed:', this.isClosed);
+    console.log('[SetContentMjsExampleContent] ✅ 组件已创建, isClosed:', this.isClosed, 'panelInstanceId:', this.panelInstanceId);
   },
   mounted() {
     console.log('[SetContentMjsExampleContent] ✅ 组件已挂载, isClosed:', this.isClosed);
@@ -34,10 +68,29 @@ export default {
     isClosed: {
       immediate: true,
       handler(newVal, oldVal) {
-        console.log('[SetContentMjsExampleContent] isClosed 状态变化:', { oldVal, newVal, hasInitializedOnce: this.hasInitializedOnce });
-        // 只有当面板显示（isClosed 为 false）且尚未初始化时才初始化
-        if (!newVal && !this.hasInitializedOnce) {
-          console.log('[SetContentMjsExampleContent] 条件满足：面板显示且未初始化，准备初始化');
+        console.log('[SetContentMjsExampleContent] isClosed 状态变化:', {
+          oldVal,
+          newVal,
+          hasInitializedOnce: this.hasInitializedOnce,
+          panelInstanceId: this.panelInstanceId,
+          isSingleton: this.isSingleton,
+          isMultiInstance: this.isMultiInstance
+        });
+
+        // ⭐ 使用基于配置文件的判断（isSingleton 来自 functionPanels.config.json）
+        // 单例模式：只初始化一次
+        // 多实例模式：每次显示都重新初始化
+        const shouldInitialize = !newVal && (
+          this.isMultiInstance || // 多实例模式：每次都初始化
+          !this.hasInitializedOnce // 单例模式：只初始化一次
+        );
+
+        if (shouldInitialize) {
+          console.log('[SetContentMjsExampleContent] 条件满足：准备初始化', {
+            mode: this.isMultiInstance ? '多实例' : '单例',
+            source: 'functionPanels.config.json',
+            panelInstanceId: this.panelInstanceId
+          });
           this.$nextTick(() => {
             console.log('[SetContentMjsExampleContent] $nextTick 回调执行，开始初始化 dualCanvasViewer (MJS)');
             this.initDualCanvasViewer();
@@ -46,7 +99,10 @@ export default {
           console.log('[SetContentMjsExampleContent] 条件不满足：', {
             isClosed: newVal,
             hasInitializedOnce: this.hasInitializedOnce,
-            reason: newVal ? '面板关闭' : '已初始化'
+            panelInstanceId: this.panelInstanceId,
+            isSingleton: this.isSingleton,
+            isMultiInstance: this.isMultiInstance,
+            reason: newVal ? '面板关闭' : '已初始化（单例模式）'
           });
         }
         // 如果面板关闭且已初始化，则清理
@@ -181,26 +237,33 @@ export default {
             container = document.createElement('div');
             container.id = this.containerId;
             container.className = 'dual-canvas-wrapper dual-canvas-overlay-single';
-            // 设置内联样式确保全屏显示
-            container.style.cssText = 'position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; z-index: 100000; background: transparent; pointer-events: auto;';
+            // ⭐ 多实例模式：根据 panelInstanceId 调整 z-index（基于 isSingleton 配置）
+            const zIndex = !this.isSingleton && this.panelInstanceId !== null
+              ? 100000 + this.panelInstanceId * 100
+              : 100000;
+            container.style.cssText = `position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; z-index: ${zIndex}; background: transparent; pointer-events: auto;`;
             document.body.appendChild(container);
-            console.log('[SetContentMjsExampleContent] 容器已添加到 body:', this.containerId);
+            console.log('[SetContentMjsExampleContent] 容器已添加到 body:', this.containerId, 'zIndex:', zIndex);
           } else {
             console.log('[SetContentMjsExampleContent] 容器已存在:', this.containerId);
           }
 
           // ⭐ 添加关闭按钮（与 CesiumMain 中的实现一致）
-          let closeBtn = document.getElementById(`${this.containerId}-close`);
+          let closeBtn = document.getElementById(this.closeBtnId);
           if (!closeBtn) {
             closeBtn = document.createElement('button');
-            closeBtn.id = `${this.containerId}-close`;
+            closeBtn.id = this.closeBtnId;
             closeBtn.textContent = '× 关闭';
             closeBtn.className = 'dual-canvas-instance-close';
+            // ⭐ 多实例模式：调整关闭按钮的 z-index（基于 isSingleton 配置）
+            const closeBtnZIndex = !this.isSingleton && this.panelInstanceId !== null
+              ? 101500 + this.panelInstanceId * 100
+              : 101500;
             closeBtn.style.cssText = `
               position: fixed;
               top: 20px;
               right: 20px;
-              z-index: 101500;
+              z-index: ${closeBtnZIndex};
               padding: 8px 16px;
               background: rgba(244, 67, 54, 0.9);
               color: white;
@@ -214,9 +277,9 @@ export default {
             `;
             closeBtn.onclick = () => this.handleExitFullscreen();
             document.body.appendChild(closeBtn);
-            console.log('[SetContentMjsExampleContent] 关闭按钮已添加到 body');
+            console.log('[SetContentMjsExampleContent] 关闭按钮已添加到 body:', this.closeBtnId, 'zIndex:', closeBtnZIndex);
           } else {
-            console.log('[SetContentMjsExampleContent] 关闭按钮已存在');
+            console.log('[SetContentMjsExampleContent] 关闭按钮已存在:', this.closeBtnId);
           }
 
           // ⭐ 清空面板内容，避免同时显示两份内容
@@ -301,15 +364,15 @@ export default {
             container.parentNode.removeChild(container);
           }
 
-          // ⭐ 清理关闭按钮
-          const closeBtn = document.getElementById(`${this.containerId}-close`);
+          // ⭐ 清理关闭按钮（使用计算属性）
+          const closeBtn = document.getElementById(this.closeBtnId);
           if (closeBtn && closeBtn.parentNode) {
             closeBtn.parentNode.removeChild(closeBtn);
-            console.log('[SetContentMjsExampleContent] ✅ 关闭按钮已清理');
+            console.log('[SetContentMjsExampleContent] ✅ 关闭按钮已清理:', this.closeBtnId);
           }
 
           this.isMounted = false;
-          console.log('[SetContentMjsExampleContent] ✅ DualCanvasViewer 已卸载 (MJS)，容器已清理');
+          console.log('[SetContentMjsExampleContent] ✅ DualCanvasViewer 已卸载 (MJS)，容器已清理:', this.containerId);
 
           // 通知父组件已清理
           this.$emit('disposed');

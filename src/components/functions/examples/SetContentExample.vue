@@ -10,10 +10,12 @@
     :auto-register="true"
     registration-key="SetContentExample"
     :visible="!isDualCanvasViewerActive"
+    v-bind="$attrs"
   >
     <template #content="slotProps">
       <SetContentMjsExampleContent
         :is-closed="slotProps.isClosed"
+        :panel-instance-id="slotProps.panelInstanceId"
         @initialized="handleInitialized"
         @disposed="handleDisposed"
         @close="handleClose"

@@ -20,13 +20,13 @@
       <template v-if="dynamicContent.component">
         <component
           :is="dynamicContent.component"
-          v-bind="{ ...dynamicContent.props, isClosed: slotProps.isClosed }"
+          v-bind="{ ...dynamicContent.props, isClosed: slotProps.isClosed, panelInstanceId: slotProps.panelInstanceId }"
           v-on="dynamicContent.events"
         />
       </template>
 
       <!-- 静态插槽内容 - 默认显示原测试内容 -->
-      <slot v-else name="content" :is-closed="slotProps.isClosed">
+      <slot v-else name="content" :is-closed="slotProps.isClosed" :panel-instance-id="slotProps.panelInstanceId" :is-singleton="slotProps.isSingleton">
         <!-- 原有默认内容保持不变 -->
         <div class="test-panel-content">
         <div class="section-title">🎉 自动加载测试</div>

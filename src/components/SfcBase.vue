@@ -24,6 +24,12 @@ export default {
     onClose: {
       type: Function,
       default: null
+    },
+    // ⭐ 面板实例ID（多实例面板使用）
+    // 通过此 prop 区分单例和多实例模式
+    panelInstanceId: {
+      type: Number,
+      default: null
     }
   },
   inject: {
@@ -42,6 +48,34 @@ export default {
       // Cesium 事件监听器取消函数
       cesiumUnsubscribe: null
     };
+  },
+  computed: {
+    /**
+     * ⭐ 判断当前是否为单例模式
+     * @returns {boolean} true 表示单例模式，false 表示多实例模式
+     */
+    isSingleton() {
+      return this.panelInstanceId === null || this.panelInstanceId === undefined;
+    },
+    /**
+     * ⭐ 判断当前是否为多实例模式
+     * @returns {boolean} true 表示多实例模式，false 表示单例模式
+     */
+    isMultiInstance() {
+      return !this.isSingleton;
+    },
+    /**
+     * ⭐ 获取面板实例的唯一标识
+     * 单例模式：返回 effectiveRegistrationKey
+     * 多实例模式：返回 effectiveRegistrationKey_panelInstanceId
+     */
+    panelInstanceKey() {
+      if (this.isSingleton) {
+        return this.effectiveRegistrationKey || this.componentName;
+      } else {
+        return `${this.effectiveRegistrationKey || this.componentName}_${this.panelInstanceId}`;
+      }
+    }
   },
   methods: {
     // ==================== Cesium 检查方法 ====================

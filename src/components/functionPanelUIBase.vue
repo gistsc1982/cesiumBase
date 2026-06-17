@@ -54,7 +54,7 @@
         <!-- 面板内容 -->
         <Transition name="content-slide">
           <div v-show="!isMinimized" class="panel-body" :style="bodyStyles">
-            <slot :is-closed="isClosed"></slot>
+            <slot :is-closed="isClosed" :panel-instance-id="panelInstanceId" :is-singleton="isSingletonByConfig"></slot>
           </div>
         </Transition>
       </div>
@@ -187,6 +187,24 @@ export default {
      */
     effectiveRegistrationKey() {
       return this.registrationKey || this.componentName;
+    },
+    /**
+     * ⭐ 基于配置文件的单例/多实例判断
+     * 从 functionPanels.config.json 中读取 singleton 配置
+     * 这是唯一的真实来源，确保运行时行为与配置一致
+     */
+    isSingletonByConfig() {
+      // 尝试从全局配置获取
+      if (typeof window !== 'undefined' && window.__functionPanelsConfig__) {
+        const config = window.__functionPanelsConfig__.panels.find(
+          p => p.name === this.effectiveRegistrationKey
+        );
+        // 如果找到配置，使用配置中的 singleton 值
+        // 如果没找到配置，默认为 true（单例模式）
+        return config ? config.singleton !== false : true;
+      }
+      // 如果没有全局配置，回退到运行时判断
+      return this.panelInstanceId === null || this.panelInstanceId === undefined;
     },
     panelStyles() {
       return {

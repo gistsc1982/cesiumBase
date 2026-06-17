@@ -149,6 +149,22 @@
       }
     },
     {
+      "name": "SetContentExampleMulti",
+      "file": "examples/SetContentExample.vue",
+      "title": "SetContent 示例（多实例）",
+      "description": "TestPanelModule setContent 方法使用示例（多实例模式）",
+      "enabled": true,
+      "visible": true,
+      "icon": "🧬",
+      "category": "test",
+      "singleton": false,
+      "permissions": [],
+      "position": {
+        "initialX": "center",
+        "initialY": 150
+      }
+    },
+    {
       "name": "SlotExample",
       "file": "examples/SlotExample.vue",
       "title": "插槽示例",
