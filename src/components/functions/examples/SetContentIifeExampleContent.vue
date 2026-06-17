@@ -6,7 +6,7 @@
 
 <script>
 export default {
-  name: 'SetContentExampleContent',
+  name: 'SetContentIifeExampleContent',
   props: {
     // 面板的关闭状态
     isClosed: {
@@ -24,23 +24,23 @@ export default {
     };
   },
   mounted() {
-    console.log('[SetContentExampleContent] mounted, isClosed:', this.isClosed);
+    console.log('[SetContentIifeExampleContent] mounted, isClosed:', this.isClosed);
   },
   watch: {
     // 监听面板的 isClosed 状态变化
     isClosed: {
       immediate: true,
       handler(newVal, oldVal) {
-        console.log('[SetContentExampleContent] isClosed 状态变化:', { oldVal, newVal, hasInitializedOnce: this.hasInitializedOnce });
+        console.log('[SetContentIifeExampleContent] isClosed 状态变化:', { oldVal, newVal, hasInitializedOnce: this.hasInitializedOnce });
         // 只有当面板显示（isClosed 为 false）且尚未初始化时才初始化
         if (!newVal && !this.hasInitializedOnce) {
-          console.log('[SetContentExampleContent] 条件满足：面板显示且未初始化，准备初始化');
+          console.log('[SetContentIifeExampleContent] 条件满足：面板显示且未初始化，准备初始化');
           this.$nextTick(() => {
-            console.log('[SetContentExampleContent] $nextTick 回调执行，开始初始化 dualCanvasViewer');
+            console.log('[SetContentIifeExampleContent] $nextTick 回调执行，开始初始化 dualCanvasViewer');
             this.initDualCanvasViewer();
           });
         } else {
-          console.log('[SetContentExampleContent] 条件不满足：', {
+          console.log('[SetContentIifeExampleContent] 条件不满足：', {
             isClosed: newVal,
             hasInitializedOnce: this.hasInitializedOnce,
             reason: newVal ? '面板关闭' : '已初始化'
@@ -48,7 +48,7 @@ export default {
         }
         // 如果面板关闭且已初始化，则清理
         if (newVal && this.hasInitializedOnce) {
-          console.log('[SetContentExampleContent] 面板已关闭，清理 dualCanvasViewer');
+          console.log('[SetContentIifeExampleContent] 面板已关闭，清理 dualCanvasViewer');
           this.disposeDualCanvasViewer();
         }
       }
@@ -59,24 +59,24 @@ export default {
   },
   methods: {
     initDualCanvasViewer() {
-      console.log('[SetContentExampleContent] initDualCanvasViewer() 被调用');
+      console.log('[SetContentIifeExampleContent] initDualCanvasViewer() 被调用');
 
       if (this.isMounted) {
-        console.log('[SetContentExampleContent] 已经挂载，跳过重复初始化');
+        console.log('[SetContentIifeExampleContent] 已经挂载，跳过重复初始化');
         return;
       }
 
-      console.log('[SetContentExampleContent] 检查 window.DualCanvasViewerPlugin...');
+      console.log('[SetContentIifeExampleContent] 检查 window.DualCanvasViewerPlugin...');
       // 检查全局 DualCanvasViewerPlugin 是否已加载
       if (typeof window !== 'undefined' && window.DualCanvasViewerPlugin) {
-        console.log('[SetContentExampleContent] DualCanvasViewerPlugin 已就绪，开始挂载...');
+        console.log('[SetContentIifeExampleContent] DualCanvasViewerPlugin 已就绪，开始挂载...');
         this.mountDualCanvasViewer();
       } else {
-        console.warn('[SetContentExampleContent] DualCanvasViewerPlugin 未就绪，等待加载...');
+        console.warn('[SetContentIifeExampleContent] DualCanvasViewerPlugin 未就绪，等待加载...');
 
         // 等待脚本加载完成
         setTimeout(() => {
-          console.log('[SetContentExampleContent] 重新检查 DualCanvasViewerPlugin...');
+          console.log('[SetContentIifeExampleContent] 重新检查 DualCanvasViewerPlugin...');
           this.initDualCanvasViewer();
         }, 500);
       }
@@ -86,18 +86,18 @@ export default {
       if (this.isMounted) return;
 
       try {
-        console.log('[SetContentExampleContent] 开始设置面板内容...');
+        console.log('[SetContentIifeExampleContent] 开始设置面板内容...');
 
         // ⭐ 再次检查 isClosed 状态，防止重复初始化
         if (this.isClosed) {
-          console.warn('[SetContentExampleContent] 面板已关闭，取消初始化');
+          console.warn('[SetContentIifeExampleContent] 面板已关闭，取消初始化');
           return;
         }
 
         // 获取面板内容容器
         const panelContent = this.$refs.panelContent;
         if (!panelContent) {
-          console.error('[SetContentExampleContent] panelContent 引用未找到');
+          console.error('[SetContentIifeExampleContent] panelContent 引用未找到');
           return;
         }
 
@@ -105,18 +105,17 @@ export default {
         const container = document.createElement('div');
         container.id = this.containerId;
         container.className = 'dual-canvas-wrapper';
-        // ⭐ 修改：使用 absolute 而不是 fixed，让容器相对于面板定位
-        // 这样 v-show 才能正确控制容器的显示
-        container.style.cssText = 'width: 100%; height: 100%; position: absolute; top: 0; left: 0; background: #000;';
+        // ⭐ 不设置内联样式，让 CSS 类控制全屏显示
+        // 这样 DualCanvasViewer 可以全屏显示
 
         // 清空面板内容并添加容器
         panelContent.innerHTML = '';
         panelContent.appendChild(container);
 
-        console.log('[SetContentExampleContent] 容器已创建，开始挂载组件...');
+        console.log('[SetContentIifeExampleContent] 容器已创建，开始挂载组件...');
         this.createVueApp();
       } catch (error) {
-        console.error('[SetContentExampleContent] 挂载失败:', error);
+        console.error('[SetContentIifeExampleContent] 挂载失败:', error);
       }
     },
 
@@ -126,22 +125,22 @@ export default {
       try {
         // ⭐ 再次检查 isClosed 状态，防止重复初始化
         if (this.isClosed) {
-          console.warn('[SetContentExampleContent] 面板已关闭，取消创建 Vue 应用');
+          console.warn('[SetContentIifeExampleContent] 面板已关闭，取消创建 Vue 应用');
           return;
         }
 
-        console.log('[SetContentExampleContent] 开始创建 Vue 应用...');
+        console.log('[SetContentIifeExampleContent] 开始创建 Vue 应用...');
 
         // ⭐ 检查全局 DualCanvasViewerPlugin 是否存在
         const iifeComponent = window.DualCanvasViewerPlugin;
         if (!iifeComponent) {
-          console.error('[SetContentExampleContent] DualCanvasViewerPlugin 未找到');
+          console.error('[SetContentIifeExampleContent] DualCanvasViewerPlugin 未找到');
           return;
         }
 
         // ⭐ 检查是否有冲突的全局状态
         if (iifeComponent.__isInUse) {
-          console.warn('[SetContentExampleContent] DualCanvasViewerPlugin 已被其他实例使用，尝试重置状态');
+          console.warn('[SetContentIifeExampleContent] DualCanvasViewerPlugin 已被其他实例使用，尝试重置状态');
           // 重置状态
           delete iifeComponent.__isInUse;
         }
@@ -151,18 +150,18 @@ export default {
         this.iifeComponent = iifeComponent;
 
         if (!iifeComponent) {
-          console.error('[SetContentExampleContent] DualCanvasViewerPlugin 未找到');
+          console.error('[SetContentIifeExampleContent] DualCanvasViewerPlugin 未找到');
           return;
         }
 
         // 获取容器元素
         const container = document.getElementById(this.containerId);
         if (!container) {
-          console.error('[SetContentExampleContent] 容器未找到:', this.containerId);
+          console.error('[SetContentIifeExampleContent] 容器未找到:', this.containerId);
           return;
         }
 
-        console.log('[SetContentExampleContent] 容器已找到，开始挂载组件...');
+        console.log('[SetContentIifeExampleContent] 容器已找到，开始挂载组件...');
 
         // 导入 Vue
         import('vue').then((Vue) => {
@@ -179,7 +178,7 @@ export default {
           // 2. 注册 DualCanvasViewer 组件（作为根组件）
           const componentTagName = 'dual-canvas-viewer-plugin';
           app.component(componentTagName, iifeComponent);
-          console.log(`[SetContentExampleContent] ✓ 已注册组件: ${componentTagName}`);
+          console.log(`[SetContentIifeExampleContent] ✓ 已注册组件: ${componentTagName}`);
 
           // 3. 清空容器并添加组件根元素
           container.innerHTML = `<${componentTagName}></${componentTagName}>`;
@@ -190,19 +189,19 @@ export default {
           this.isMounted = true;
           this.hasInitializedOnce = true;
 
-          console.log(`[SetContentExampleContent] ✅ DualCanvasViewer 已挂载: ${this.containerId}`);
+          console.log(`[SetContentIifeExampleContent] ✅ DualCanvasViewer 已挂载: ${this.containerId}`);
 
           // 通知父组件已初始化
           this.$emit('initialized');
         });
       } catch (error) {
-        console.error('[SetContentExampleContent] 创建 Vue 应用失败:', error);
+        console.error('[SetContentIifeExampleContent] 创建 Vue 应用失败:', error);
       }
     },
 
     disposeDualCanvasViewer() {
       if (!this.isMounted) {
-        console.log('[SetContentExampleContent] 未挂载，无需清理');
+        console.log('[SetContentIifeExampleContent] 未挂载，无需清理');
         return;
       }
 
@@ -221,18 +220,18 @@ export default {
           // ⭐ 清理全局状态
           if (this.iifeComponent && this.iifeComponent.__isInUse) {
             delete this.iifeComponent.__isInUse;
-            console.log('[SetContentExampleContent] ✅ 已清理全局状态');
+            console.log('[SetContentIifeExampleContent] ✅ 已清理全局状态');
           }
           this.iifeComponent = null;
 
           this.isMounted = false;
-          console.log('[SetContentExampleContent] ✅ DualCanvasViewer 已卸载，容器已清理');
+          console.log('[SetContentIifeExampleContent] ✅ DualCanvasViewer 已卸载，容器已清理');
 
           // 通知父组件已清理
           this.$emit('disposed');
         }
       } catch (error) {
-        console.error('[SetContentExampleContent] 清理失败:', error);
+        console.error('[SetContentIifeExampleContent] 清理失败:', error);
       }
     }
   }
