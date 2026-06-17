@@ -257,6 +257,9 @@ import { markRaw } from 'vue';
 // ⭐ 导入功能面板配置文件
 import functionPanelsConfig from './functions/functionPanels.config.json';
 
+// ⭐ 导入功能面板配置管理器（初始化全局单例）
+import './functions/FunctionPanelsConfigManager.js';
+
 // ⭐ 导入多实例面板配置管理器
 import { multiInstancePanelConfigManager } from './utils/MultiInstancePanelConfigManager.js';
 // ⭐ 导入面板单例管理器
@@ -1232,6 +1235,11 @@ export default {
           ? window.__functionPanelsConfigManager__.getPanel(key)
           : null;
 
+        console.log(`[CesiumMain #${instanceId}] 🔍 调试面板 ${key}:`, {
+          instancePanelConfig,
+          functionPanelConfig,
+          configVisible: config.visible
+        });
         // 合并配置：实例配置优先，然后是传入的配置
         const mergedProps = {
           ...(instancePanelConfig?.position || {}),
@@ -1241,9 +1249,17 @@ export default {
         // ⭐ 合并可见性配置（优先级从高到低）：
         // 1. config.visible - 本次注册明确指定的可见性（用户点击按钮时传入）
         // 2. currentPanelState?.visible - 已存在的面板状态（保持用户之前设置的状态）
-        // 3. instancePanelConfig.visible - 配置文件中的默认值
-        // 4. 默认值 true（如果没有其他配置，默认可见）
+        // 3. functionPanelConfig.visible - 单例面板配置文件中的默认值
+        // 4. instancePanelConfig.visible - 多实例面板配置文件中的默认值
+        // 5. 默认值 false（如果没有其他配置，默认不可见）
         const currentPanelState = panelSingletonManager.getPanel(key);
+
+        console.log(`[CesiumMain #${instanceId}] 🔍 调试面板 ${key} 可见性:`, {
+          configVisible: config.visible,
+          currentPanelStateVisible: currentPanelState?.visible,
+          functionPanelConfigVisible: functionPanelConfig?.visible,
+          instancePanelConfigVisible: instancePanelConfig?.visible
+        });
 
         // ⭐ 关键修复：如果 config.visible 明确指定为 true 或 false，优先使用
         // 这样可以确保用户点击按钮时的意图被正确执行
@@ -1256,13 +1272,17 @@ export default {
           // 使用现有的面板状态
           mergedVisible = currentPanelState.visible;
           console.log(`[CesiumMain #${instanceId}] 🔄 使用现有面板状态: ${mergedVisible}`);
+        } else if (functionPanelConfig?.visible !== undefined) {
+          // 使用单例面板配置文件的默认值
+          mergedVisible = functionPanelConfig.visible;
+          console.log(`[CesiumMain #${instanceId}] 📋 使用单例面板配置文件默认值: ${mergedVisible}`);
         } else if (instancePanelConfig?.visible !== undefined) {
-          // 使用配置文件的默认值
+          // 使用多实例面板配置文件的默认值
           mergedVisible = instancePanelConfig.visible;
-          console.log(`[CesiumMain #${instanceId}] 📋 使用配置文件默认值: ${mergedVisible}`);
+          console.log(`[CesiumMain #${instanceId}] 📋 使用多实例面板配置文件默认值: ${mergedVisible}`);
         } else {
-          // 默认可见
-          mergedVisible = true;
+          // 默认不可见
+          mergedVisible = false;
           console.log(`[CesiumMain #${instanceId}] ✨ 使用默认值: ${mergedVisible}`);
         }
 
@@ -1297,10 +1317,16 @@ export default {
         }
 
         // ⭐ 注册到 PanelSingletonManager（统一管理单例面板）
+        // ⭐ 关键修复：检查管理器中是否已有该面板且状态被修改过
+        const existingPanel = panelSingletonManager.getPanel(key);
+        // 如果面板已存在且用户已经改变了可见性（不是默认的 undefined/false），使用管理器中的状态
+        const useExistingVisible = existingPanel && existingPanel._visibilityExplicitlySet;
+        const finalVisible = useExistingVisible ? existingPanel.visible : mergedVisible;
+
         panelSingletonManager.registerPanel(key, {
           component: markRaw(actualComponent), // 使用 markRaw 避免响应式包装
           props: mergedProps,
-          visible: mergedVisible
+          visible: finalVisible
         });
 
         // ⭐ 同时缓存到本地（用于兼容性）

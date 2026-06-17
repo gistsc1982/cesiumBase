@@ -371,21 +371,41 @@ export default {
           ...(instanceConfig?.position || {})
         };
 
-        // 使用实例配置的可见性，如果没有则默认为false（默认关闭）
-        const visible = instanceConfig ? (instanceConfig.visible !== false) : false;
-
         // ⭐ 单例面板：不传递组件实例（组件已在预加载时加载）
-        // ⭐ 关键修复：检查面板是否已经在 PanelSingletonManager 中设置为 visible
-        // 如果用户通过工具栏按钮设置了 visible: true，则保持用户设置
-        let actualVisible = visible;
+        // ⭐ 关键修复：优先使用 PanelSingletonManager 中的状态（用户点击按钮时设置）
+        let actualVisible = false;
         const panelSingletonManager = window.panelSingletonManager || window.__panelSingletonManager__;
         if (panelSingletonManager) {
           const existingPanel = panelSingletonManager.getPanel(this.effectiveRegistrationKey);
-          if (existingPanel && existingPanel.visible === true) {
-            // 用户已经设置为可见，保持可见状态
+          console.log(`[FunctionPanelUIBase] 🔍 检查面板 ${this.effectiveRegistrationKey}:`, {
+            existingPanel: existingPanel ? {
+              visible: existingPanel.visible,
+              isClosed: existingPanel.isClosed,
+              _visibilityExplicitlySet: existingPanel._visibilityExplicitlySet
+            } : null,
+            instanceConfig: instanceConfig ? {
+              visible: instanceConfig.visible
+            } : null
+          });
+
+          // ⭐ 如果面板已存在且有明确的可见性设置（包括 false），使用管理器中的状态
+          // 这确保了用户通过工具栏按钮设置的状态被正确保留
+          if (existingPanel && existingPanel._visibilityExplicitlySet) {
+            actualVisible = existingPanel.visible;
+            console.log(`[FunctionPanelUIBase] 🎯 使用管理器中的可见性状态: ${actualVisible} (用户已设置)`);
+          } else if (existingPanel && existingPanel.visible === true) {
+            // 兼容旧逻辑：如果面板已显示，保持显示状态
             actualVisible = true;
-            console.log(`[FunctionPanelUIBase] 🎯 保持用户设置的 visible: true`);
+            console.log(`[FunctionPanelUIBase] 🎯 保持现有的 visible: true`);
+          } else {
+            // 使用实例配置的可见性，如果没有则默认为false（默认关闭）
+            actualVisible = instanceConfig ? (instanceConfig.visible !== false) : false;
+            console.log(`[FunctionPanelUIBase] 📋 使用实例配置可见性: ${actualVisible}`);
           }
+        } else {
+          // 管理器不存在，使用实例配置
+          actualVisible = instanceConfig ? (instanceConfig.visible !== false) : false;
+          console.log(`[FunctionPanelUIBase] ⚠️ 管理器不存在，使用实例配置: ${actualVisible}`);
         }
 
         this.registerPanelComponent(this.effectiveRegistrationKey, {

@@ -247,16 +247,43 @@ class PanelSingletonManager {
    * @param {boolean} config.visible - 是否可见
    */
   registerPanel(panelName, config) {
+    // ⭐ 获取现有面板（如果存在）
+    const existingPanel = this.panelRegistry.get(panelName);
+
+    // ⭐ 修复：确保 visible 和 isClosed 状态一致
+    // 如果 config.visible 明确指定为 true 或 false，使用它
+    // 否则默认为 visible: false, isClosed: true
+    const visible = config.visible === true;
+    const isClosed = !visible;
+
+    // ⭐ 关键修复：正确处理 _visibilityExplicitlySet 标志
+    // 1. 如果 config.visible 是明确的布尔值，说明这是用户/代码的明确设置
+    // 2. 如果面板已存在且有 _visibilityExplicitlySet 标志，保留该标志
+    // 3. 否则默认为 false
+    let visibilityExplicitlySet = false;
+
+    if (config.visible === true || config.visible === false) {
+      // config.visible 是明确的布尔值，说明这是用户/代码的明确设置
+      visibilityExplicitlySet = true;
+      console.log(`[PanelSingletonManager] 🎯 config.visible 是明确的布尔值: ${config.visible}，设置 _visibilityExplicitlySet = true`);
+    } else if (existingPanel?._visibilityExplicitlySet) {
+      // 保留现有的标志
+      visibilityExplicitlySet = true;
+      console.log(`[PanelSingletonManager] 🔄 保留现有的 _visibilityExplicitlySet 标志`);
+    }
+
     this.panelRegistry.set(panelName, {
       component: config.component,
       props: config.props || {},
-      visible: config.visible !== false,
-      isClosed: config.visible === false
+      visible,
+      isClosed,
+      _visibilityExplicitlySet: visibilityExplicitlySet
     });
     console.log(`[PanelSingletonManager] ✅ 注册面板: ${panelName}`, {
-      visible: config.visible,
-      isClosed: config.visible === false,
-      hasComponent: !!config.component
+      visible,
+      isClosed,
+      hasComponent: !!config.component,
+      visibilityExplicitlySet
     });
   }
 
@@ -328,6 +355,8 @@ class PanelSingletonManager {
     const panel = this.panelRegistry.get(panelName);
     if (panel) {
       panel.visible = visible;
+      // ⭐ 标记用户明确设置了可见性
+      panel._visibilityExplicitlySet = true;
       // ⭐ 同步 isClosed 状态：visible = false 时设置 isClosed = true，visible = true 时重置 isClosed = false
       if (visible) {
         panel.isClosed = false;

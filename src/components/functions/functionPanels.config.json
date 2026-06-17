@@ -105,7 +105,7 @@
       "title": "双画布查看器",
       "description": "双画布查看器（多实例模式）",
       "enabled": true,
-      "visible": true,
+      "visible": false,
       "icon": "🧬",
       "category": "tools",
       "singleton": false,
