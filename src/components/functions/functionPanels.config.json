@@ -1,7 +1,7 @@
 {
   "description": "功能面板组件配置文件 - 可手工编辑来控制哪些组件可以被动态加载和默认显示",
   "version": "1.0.0",
-  "lastUpdated": "2024-06-12",
+  "lastUpdated": "2026-06-17",
   "panels": [
     {
       "name": "TestPanel",
@@ -19,7 +19,7 @@
         "initialY": 100
       }
     },
-     {
+    {
       "name": "TestPanelMulti",
       "file": "TestPanel.vue",
       "title": "TestPanel（多实例）",
@@ -133,6 +133,70 @@
         "initialX": "center",
         "initialY": 100
       }
+    },
+    {
+      "name": "SetContentExample",
+      "file": "examples/SetContentExample.vue",
+      "title": "SetContent 示例",
+      "description": "TestPanelModule setContent 方法使用示例",
+      "enabled": true,
+      "visible": false,
+      "icon": "📦",
+      "category": "test",
+      "singleton": true,
+      "permissions": [],
+      "position": {
+        "initialX": "right",
+        "initialY": 200
+      }
+    },
+    {
+      "name": "MultiContentExample",
+      "file": "examples/MultiContentExample.vue",
+      "title": "多内容切换示例",
+      "description": "TestPanelModule 动态切换内容示例",
+      "enabled": true,
+      "visible": false,
+      "icon": "🔄",
+      "category": "test",
+      "singleton": true,
+      "permissions": [],
+      "position": {
+        "initialX": "right",
+        "initialY": 280
+      }
+    },
+    {
+      "name": "SlotExample",
+      "file": "examples/SlotExample.vue",
+      "title": "插槽示例",
+      "description": "TestPanelModule 插槽使用示例",
+      "enabled": true,
+      "visible": false,
+      "icon": "🎨",
+      "category": "test",
+      "singleton": true,
+      "permissions": [],
+      "position": {
+        "initialX": "right",
+        "initialY": 360
+      }
+    },
+    {
+      "name": "SlotExampleMulti",
+      "file": "examples/SlotExample.vue",
+      "title": "插槽示例（多实例）",
+      "description": "TestPanelModule 插槽使用示例（多实例）",
+      "enabled": true,
+      "visible": false,
+      "icon": "🧬",
+      "category": "test",
+      "singleton": false,
+      "permissions": [],
+      "position": {
+        "initialX": "center",
+        "initialY": 200
+      }
     }
   ],
   "categories": {
@@ -140,6 +204,11 @@
       "name": "工具",
       "description": "工具类面板",
       "icon": "🔧"
+    },
+    "test": {
+      "name": "test",
+      "description": "test 类面板",
+      "icon": "📁"
     }
   }
 }
