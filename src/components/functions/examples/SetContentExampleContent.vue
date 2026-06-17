@@ -1,5 +1,5 @@
 <template>
-  <div ref="panelContent" class="set-content-example-content">
+  <div v-show="!isClosed" ref="panelContent" class="set-content-example-content">
     <div class="loading-message">正在初始化双画布查看器...</div>
   </div>
 </template>
@@ -22,17 +22,27 @@ export default {
       hasInitializedOnce: false
     };
   },
+  mounted() {
+    console.log('[SetContentExampleContent] mounted, isClosed:', this.isClosed);
+  },
   watch: {
     // 监听面板的 isClosed 状态变化
     isClosed: {
       immediate: true,
-      handler(newVal) {
-        console.log('[SetContentExampleContent] isClosed 状态变化:', newVal);
+      handler(newVal, oldVal) {
+        console.log('[SetContentExampleContent] isClosed 状态变化:', { oldVal, newVal, hasInitializedOnce: this.hasInitializedOnce });
         // 只有当面板显示（isClosed 为 false）且尚未初始化时才初始化
         if (!newVal && !this.hasInitializedOnce) {
+          console.log('[SetContentExampleContent] 条件满足：面板显示且未初始化，准备初始化');
           this.$nextTick(() => {
-            console.log('[SetContentExampleContent] 面板已显示，开始初始化 dualCanvasViewer');
+            console.log('[SetContentExampleContent] $nextTick 回调执行，开始初始化 dualCanvasViewer');
             this.initDualCanvasViewer();
+          });
+        } else {
+          console.log('[SetContentExampleContent] 条件不满足：', {
+            isClosed: newVal,
+            hasInitializedOnce: this.hasInitializedOnce,
+            reason: newVal ? '面板关闭' : '已初始化'
           });
         }
         // 如果面板关闭且已初始化，则清理
@@ -77,6 +87,12 @@ export default {
       try {
         console.log('[SetContentExampleContent] 开始设置面板内容...');
 
+        // ⭐ 再次检查 isClosed 状态，防止重复初始化
+        if (this.isClosed) {
+          console.warn('[SetContentExampleContent] 面板已关闭，取消初始化');
+          return;
+        }
+
         // 获取面板内容容器
         const panelContent = this.$refs.panelContent;
         if (!panelContent) {
@@ -105,6 +121,12 @@ export default {
       if (this.isMounted) return;
 
       try {
+        // ⭐ 再次检查 isClosed 状态，防止重复初始化
+        if (this.isClosed) {
+          console.warn('[SetContentExampleContent] 面板已关闭，取消创建 Vue 应用');
+          return;
+        }
+
         console.log('[SetContentExampleContent] 开始创建 Vue 应用...');
         const iifeComponent = window.DualCanvasViewerPlugin;
 
