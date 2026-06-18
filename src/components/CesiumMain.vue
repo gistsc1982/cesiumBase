@@ -1838,6 +1838,17 @@ export default {
       // ⭐ 添加容器到 DOM
       document.body.appendChild(container);
 
+      // ⭐ 关键修复：为多实例容器添加所有鼠标事件监听器，确保能操作Cesium
+      // 这些事件与单实例容器(dualCanvasContainer)的事件绑定保持一致
+      container.addEventListener('mousedown', (e) => this.handleMouseDown(e));
+      container.addEventListener('mousemove', (e) => this.handleMouseMove(e));
+      container.addEventListener('mouseup', (e) => this.handleMouseUp(e));
+      container.addEventListener('wheel', (e) => this.handleWheel(e), { passive: false });
+      container.addEventListener('contextmenu', (e) => e.preventDefault());
+      console.log(`[CesiumMain] ✅ 已为多实例容器绑定所有鼠标事件: ${containerId}`, {
+        事件: ['mousedown', 'mousemove', 'mouseup', 'wheel', 'contextmenu']
+      });
+
       // 动态加载组件
       if (!this.functionPanelComponents[panelId]) {
         console.log(`[CesiumMain] 📦 加载面板组件: ${panelId}`);
@@ -1989,37 +2000,110 @@ export default {
 
         console.log(`[CesiumMain] ✅ mjs 多实例已销毁: ${instanceKey}`);
 
-        // ⭐ 恢复单例容器的显示状态（如果配置了 singletonContainerId）
+        // ⭐ 关键修复：多实例销毁后，无条件恢复Cesium操作能力
+        // 无论单例DualCanvasViewer是否存在，都需要确保Cesium可以正常工作
+        setTimeout(() => {
+          console.log('[CesiumMain] 🔍 [修复多实例销毁] 开始恢复Cesium操作状态');
+
+          // 1. 更新操作路由器的Cesium对象引用
+          if (this.syncManager && this.syncManager.operationRouter) {
+            console.log('🔍 [修复多实例销毁] 手动更新操作路由器的Cesium对象引用');
+            this.syncManager.operationRouter.updateCesiumObjects();
+            console.log('🔍 [修复多实例销毁] 操作路由器Cesium对象引用更新完成');
+          } else {
+            console.warn('🔍 [修复多实例销毁] 无法更新操作路由器', {
+              hasSyncManager: !!this.syncManager,
+              hasOperationRouter: !!(this.syncManager && this.syncManager.operationRouter)
+            });
+          }
+
+          // 2. 重新启用Cesium输入（最重要！）
+          if (this.cesiumViewer && this.cesiumViewer.scene && this.cesiumViewer.scene.screenSpaceCameraController) {
+            console.log('🔍 [修复多实例销毁] 重新启用Cesium输入');
+            this.cesiumViewer.scene.screenSpaceCameraController.enableInputs = true;
+            console.log('🔍 [修复多实例销毁] Cesium输入已重新启用');
+          } else {
+            console.warn('🔍 [修复多实例销毁] 无法启用Cesium输入', {
+              hasCesiumViewer: !!this.cesiumViewer,
+              hasScene: !!(this.cesiumViewer && this.cesiumViewer.scene),
+              hasController: !!(this.cesiumViewer && this.cesiumViewer.scene && this.cesiumViewer.scene.screenSpaceCameraController)
+            });
+          }
+
+          // 3. 重置mouseState（避免全局mouseup监听器失效）
+          if (this.mouseState && this.mouseState.isDown) {
+            console.log('🔍 [修复多实例销毁] 重置mouseState');
+            this.mouseState.isDown = false;
+            this.mouseState.mappedButton = null;
+          }
+
+          // 3.1 重置所有操作状态标志（修复鼠标操作失效问题）
+          console.log('🔍 [修复多实例销毁] 重置所有操作状态标志');
+          this.currentOperation = null;
+          this._flipDetectionDone = false;
+          this.isWheeling = false;
+
+          // 3.2 清理syncManager操作状态
+          if (this.syncManager && this.syncManager.operationState) {
+            console.log('🔍 [修复多实例销毁] 清理syncManager操作状态');
+            this.syncManager.operationState.isDragging = false;
+            this.syncManager.operationState.operationType = null;
+          }
+
+          // 3.3 检查是否有单例DualCanvasViewer
+          const hasSingletonDualViewer = window.__dualCanvasViewerInstances && window.__dualCanvasViewerInstances.length > 0;
+          console.log('🔍 [修复多实例销毁] 检查单例DualCanvasViewer:', { hasSingletonDualViewer });
+
+          if (!hasSingletonDualViewer) {
+            // 没有单例DualCanvasViewer：重置统一坐标系模式标志
+            console.log('🔍 [修复多实例销毁] 没有单例DualCanvasViewer，重置统一坐标系模式标志');
+            this.unifiedProjectionInitialized = false;
+            if (typeof window !== 'undefined' && window.__unifiedProjectionMode__ !== undefined) {
+              window.__unifiedProjectionMode__ = false;
+              console.log('🔍 [修复多实例销毁] 已重置全局标志 window.__unifiedProjectionMode__ = false');
+            }
+          } else {
+            console.log('🔍 [修复多实例销毁] 存在单例DualCanvasViewer，保持统一坐标系模式标志不变');
+          }
+
+          // 4. 如果有单例DualCanvasViewer，重新启用其controls
+          if (window.__dualCanvasViewerInstances && window.__dualCanvasViewerInstances.length > 0) {
+            const dualViewer = window.__dualCanvasViewerInstances[0];
+            if (dualViewer && dualViewer.controls1) {
+              console.log('🔍 [修复多实例销毁] 重新启用单例DualCanvasViewer controls');
+              dualViewer.controls1.enabled = true;
+              dualViewer.controls1.enablePan = true;
+              dualViewer.eventLayerDisabled = false;
+              console.log('🔍 [修复多实例销毁] 单例DualCanvasViewer状态已重置');
+            }
+          } else {
+            console.log('[CesiumMain] 🔍 [修复多实例销毁] 没有单例DualCanvasViewer，跳过controls重置');
+          }
+
+          console.log('[CesiumMain] ✅ [修复多实例销毁] Cesium操作状态恢复完成');
+        }, 100);
+
+        // ⭐ 恢复单例容器的显示状态（如果单例存在）
         const panelConfig = getPanelConfig(panelId);
         if (panelConfig?.singletonContainerId) {
           const singletonPanelName = this.findSingletonPanelByContainerId(panelConfig.singletonContainerId);
           if (singletonPanelName && panelSingletonManager.hasPanel(singletonPanelName)) {
-            // 检查单例面板是否应该是可见的
             const singletonPanel = panelSingletonManager.getPanel(singletonPanelName);
             if (singletonPanel && singletonPanel.visible) {
-              // ⭐ 使用 querySelectorAll 确保恢复所有相同 ID 的容器
+              // 恢复单例容器显示
               const allSingletonContainers = document.querySelectorAll(`#${panelConfig.singletonContainerId}`);
               allSingletonContainers.forEach((container) => {
                 container.classList.remove('hidden');
                 console.log(`[CesiumMain] 🔄 已移除 hidden 类，恢复单例容器显示: ${panelConfig.singletonContainerId}`);
               });
-
-              // ⭐ 关键修复：恢复单例显示后，手动更新操作路由器的Cesium对象引用
-              // 这样可以确保滚轮事件能正确操作Cesium
-              setTimeout(() => {
-                if (this.syncManager && this.syncManager.operationRouter) {
-                  console.log('🔍 [修复多实例销毁] 恢复单例显示后，手动更新操作路由器的Cesium对象引用');
-                  this.syncManager.operationRouter.updateCesiumObjects();
-                  console.log('🔍 [修复多实例销毁] 操作路由器Cesium对象引用更新完成');
-                } else {
-                  console.warn('🔍 [修复多实例销毁] 无法更新操作路由器', {
-                    hasSyncManager: !!this.syncManager,
-                    hasOperationRouter: !!(this.syncManager && this.syncManager.operationRouter)
-                  });
-                }
-              }, 100);
+            } else {
+              console.log(`[CesiumMain] ℹ️ 单例面板存在但不可见: ${singletonPanelName}`);
             }
+          } else {
+            console.log(`[CesiumMain] ℹ️ 单例面板不存在或未注册: ${singletonPanelName || '(unknown)'}`);
           }
+        } else {
+          console.log('[CesiumMain] ℹ️ 面板配置中没有 singletonContainerId');
         }
       }
     },
