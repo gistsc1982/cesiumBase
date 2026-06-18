@@ -1918,6 +1918,44 @@ export default {
         事件: ['mousedown', 'mousemove', 'mouseup', 'wheel', 'contextmenu']
       });
 
+      // ⭐ 关键修复：添加CSS覆盖，确保 control-panel 和 coordinate-panel 使用 fixed 定位
+      // 防止它们使用默认流式布局导致容器高度被撑开
+      const styleId = `dual-canvas-override-mjs-${panelInstanceId}`;
+      if (!document.getElementById(styleId)) {
+        const style = document.createElement('style');
+        style.id = styleId;
+        style.textContent = `
+          #${containerId} .control-panel {
+            position: fixed !important;
+            top: 80px !important;
+            right: 20px !important;
+            left: auto !important;
+            max-height: calc(100vh - 100px) !important;
+            z-index: ${101000 + panelInstanceId * 100} !important;
+            pointer-events: auto !important;
+          }
+          #${containerId} .control-panel * {
+            pointer-events: auto !important;
+          }
+          #${containerId} .coordinate-panel {
+            position: fixed !important;
+            top: 80px !important;
+            left: 20px !important;
+            max-height: calc(100vh - 100px) !important;
+            z-index: ${101000 + panelInstanceId * 100} !important;
+            pointer-events: auto !important;
+          }
+          #${containerId} .coordinate-panel * {
+            pointer-events: auto !important;
+          }
+          #${containerId} .dual-canvas-viewer {
+            overflow: hidden !important;
+          }
+        `;
+        document.head.appendChild(style);
+        console.log(`[CesiumMain] ✅ 已添加 CSS 样式覆盖: ${styleId}`);
+      }
+
       // 动态加载组件
       if (!this.functionPanelComponents[panelId]) {
         console.log(`[CesiumMain] 📦 加载面板组件: ${panelId}`);
