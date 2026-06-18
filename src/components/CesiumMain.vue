@@ -48,6 +48,19 @@
         </div>
       </div>
     </div>
+    <!-- dual-canvas-viewer 覆盖层容器 - 独立 Vue 应用挂载点 -->
+    <div
+      id="dualCanvasContainer"
+      ref="dualCanvasContainer"
+      class="dual-canvas-overlay"
+      @mousedown="handleMouseDown"
+      @mousemove="handleMouseMove"
+      @mouseup="handleMouseUp"
+      @wheel="handleWheel"
+      @contextmenu.prevent
+    >
+      <!-- dual-canvas-viewer-plugin 将被动态挂载到这里 -->
+    </div>
 
     <!-- ⭐ Cesium 工具条 -->
     <CesiumToolbar
@@ -1875,6 +1888,21 @@ export default {
       );
 
       console.log(`[CesiumMain] ✅ 多实例面板已注册: ${instanceKey}`);
+
+      // ⭐ 关键修复：多实例创建后，手动更新操作路由器的Cesium对象引用
+      // 确保滚轮事件能正确操作Cesium
+      setTimeout(() => {
+        if (this.syncManager && this.syncManager.operationRouter) {
+          console.log('🔍 [修复多实例创建] 多实例创建后，手动更新操作路由器的Cesium对象引用');
+          this.syncManager.operationRouter.updateCesiumObjects();
+          console.log('🔍 [修复多实例创建] 操作路由器Cesium对象引用更新完成');
+        } else {
+          console.warn('🔍 [修复多实例创建] 无法更新操作路由器', {
+            hasSyncManager: !!this.syncManager,
+            hasOperationRouter: !!(this.syncManager && this.syncManager.operationRouter)
+          });
+        }
+      }, 300); // 增加延迟，确保DualCanvasViewer已完全挂载并初始化SyncManager
     },
 
     /**
@@ -1975,6 +2003,21 @@ export default {
                 container.classList.remove('hidden');
                 console.log(`[CesiumMain] 🔄 已移除 hidden 类，恢复单例容器显示: ${panelConfig.singletonContainerId}`);
               });
+
+              // ⭐ 关键修复：恢复单例显示后，手动更新操作路由器的Cesium对象引用
+              // 这样可以确保滚轮事件能正确操作Cesium
+              setTimeout(() => {
+                if (this.syncManager && this.syncManager.operationRouter) {
+                  console.log('🔍 [修复多实例销毁] 恢复单例显示后，手动更新操作路由器的Cesium对象引用');
+                  this.syncManager.operationRouter.updateCesiumObjects();
+                  console.log('🔍 [修复多实例销毁] 操作路由器Cesium对象引用更新完成');
+                } else {
+                  console.warn('🔍 [修复多实例销毁] 无法更新操作路由器', {
+                    hasSyncManager: !!this.syncManager,
+                    hasOperationRouter: !!(this.syncManager && this.syncManager.operationRouter)
+                  });
+                }
+              }, 100);
             }
           }
         }
@@ -2213,6 +2256,21 @@ export default {
       };
 
       this.cesiumViewer = new Cesium.Viewer("cesiumContainer", config);
+
+      // 🔍 手动更新操作路由器的Cesium对象引用
+      console.log('🔍 [修复] Cesium Viewer已创建，手动更新操作路由器的Cesium对象引用');
+      setTimeout(() => {
+        if (this.syncManager && this.syncManager.operationRouter) {
+          console.log('🔍 [修复] 调用updateCesiumObjects更新操作处理器');
+          this.syncManager.operationRouter.updateCesiumObjects();
+          console.log('🔍 [修复] updateCesiumObjects调用完成');
+        } else {
+          console.warn('🔍 [修复] 无法更新操作路由器 - SyncManager或OperationRouter不可用', {
+            hasSyncManager: !!this.syncManager,
+            hasOperationRouter: !!(this.syncManager && this.syncManager.operationRouter)
+          });
+        }
+      }, 100);
 
       // ✅ 配置 Draco 解码器 - 支持 Draco 压缩的 GLB/GLTF 模型
       try {
@@ -2739,6 +2797,20 @@ export default {
       if (this.syncManager && typeof this.syncManager.setCesiumViewer === 'function') {
         this.syncManager.setCesiumViewer(this.cesiumViewer);
         console.log('[HelloWorld] SyncManager.setCesiumViewer 已调用');
+
+        // 🔍 手动更新操作路由器的Cesium对象引用
+        setTimeout(() => {
+          if (this.syncManager && this.syncManager.operationRouter) {
+            console.log('🔍 [修复] 在initSyncManager中手动更新操作路由器的Cesium对象引用');
+            this.syncManager.operationRouter.updateCesiumObjects();
+            console.log('🔍 [修复] initSyncManager中的updateCesiumObjects调用完成');
+          } else {
+            console.warn('🔍 [修复] 在initSyncManager中无法更新操作路由器', {
+              hasSyncManager: !!this.syncManager,
+              hasOperationRouter: !!(this.syncManager && this.syncManager.operationRouter)
+            });
+          }
+        }, 100);
       } else {
         console.warn('[HelloWorld] SyncManager.setCesiumViewer 不可用');
       }
@@ -4386,34 +4458,16 @@ async loadTestSfcComponent(instanceId) {
 
     applyPointerEvents(container) {
       const excludeSelectors = [
-        // 容器和面板
-        '.control-panel', '.coordinate-panel', '.dual-canvas-viewer',
-        // 按钮和控件
-        '.tab-button', '.slider', '.toggle-checkbox', '.transform-btn', '.action-btn',
-        '.toggle-btn', '.model-selector', '.file-input', '.close-btn',
-        // 标准表单元素
-        'button', 'input', 'select', 'textarea', 'label',
-        // 其他可能的交互元素
-        '[role="button"]', '[onclick]', '[data-clickable]',
-        // 滚动条
-        '::-webkit-scrollbar', '::-webkit-scrollbar-thumb', '::-webkit-scrollbar-track'
+        '.control-panel', '.coordinate-panel', '.tab-button',
+        '.slider', '.toggle-checkbox', '.transform-btn', '.action-btn',
+        '.toggle-btn', '.model-selector', '.file-input',
+        'button', 'input', 'select', 'textarea'
       ];
 
       const allElements = container.querySelectorAll('*');
       allElements.forEach(el => {
-        const isInteractive = excludeSelectors.some(sel => {
-          try {
-            return el.matches(sel);
-          } catch (e) {
-            return false;
-          }
-        });
-
-        // 确保容器本身也有 pointer-events
-        if (el === container || el.classList.contains('control-panel') ||
-            el.classList.contains('coordinate-panel') || el.classList.contains('dual-canvas-viewer')) {
-          el.style.pointerEvents = 'auto';
-        } else if (!isInteractive) {
+        const isInteractive = excludeSelectors.some(sel => el.matches(sel));
+        if (!isInteractive) {
           el.style.pointerEvents = 'none';
         }
       });
@@ -5632,6 +5686,31 @@ async loadTestSfcComponent(instanceId) {
     },
 
     handleWheel(event) {
+      console.log('🔍 [诊断] handleWheel 被调用', {
+        target: event.target.tagName,
+        currentTarget: event.currentTarget.tagName,
+        deltaY: event.deltaY,
+        defaultPrevented: event.defaultPrevented,
+        propagationStopped: event.eventPhase === 0
+      });
+
+      // 🔍 检查Cesium viewer和camera状态
+      console.log('🔍 [诊断] Cesium状态检查', {
+        hasCesiumViewer: !!this.cesiumViewer,
+        hasCamera: !!(this.cesiumViewer && this.cesiumViewer.camera),
+        cameraEnabled: !!(this.cesiumViewer && this.cesiumViewer.camera && this.cesiumViewer.camera._),
+        syncManagerCesiumViewer: !!(this.syncManager && this.syncManager.cesiumViewer),
+        syncManagerCesiumCamera: !!(this.syncManager && this.syncManager.cesiumViewer && this.syncManager.cesiumViewer.camera)
+      });
+
+      // 🔍 检查操作路由器状态
+      console.log('🔍 [诊断] 操作路由器状态', {
+        hasOperationRouter: !!(this.syncManager && this.syncManager.operationRouter),
+        hasUpdateCesiumObjects: !!(this.syncManager && this.syncManager.operationRouter && typeof this.syncManager.operationRouter.updateCesiumObjects === 'function'),
+        hasHandlers: !!(this.syncManager && this.syncManager.operationRouter && this.syncManager.operationRouter.handlers),
+        handlerCount: this.syncManager && this.syncManager.operationRouter && this.syncManager.operationRouter.handlers ? Object.keys(this.syncManager.operationRouter.handlers).length : 0
+      });
+
       // 设置滚轮操作标志
       this.isWheeling = true;
 
@@ -5641,8 +5720,15 @@ async loadTestSfcComponent(instanceId) {
         useLocalCoordSystem = this.syncManager.mercatorProjection.isUsingLocalCoordinateSystem?.() || false;
       }
 
+      console.log('🔍 [诊断] 坐标系模式检查', {
+        useLocalCoordSystem,
+        unifiedProjectionInitialized: this.unifiedProjectionInitialized,
+        hasSyncManager: !!this.syncManager
+      });
+
       // ⭐ 关键修复：先检查局部坐标系模式，避免被统一坐标系模式覆盖
       if (useLocalCoordSystem || (this.unifiedProjectionInitialized && this.syncManager)) {
+        console.log('🔍 [诊断] 进入统一/局部坐标系模式，调用 preventDefault()');
         event.preventDefault();
 
         // ⭐ 关键修复：ENU模式下，不需要先同步Three.js到Cesium
