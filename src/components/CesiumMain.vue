@@ -2030,12 +2030,16 @@ export default {
             });
           }
 
-          // 3. 重置mouseState（避免全局mouseup监听器失效）
-          if (this.mouseState && this.mouseState.isDown) {
-            console.log('🔍 [修复多实例销毁] 重置mouseState');
-            this.mouseState.isDown = false;
-            this.mouseState.mappedButton = null;
-          }
+          // 3. 完整重置mouseState（避免全局mouseup监听器失效）
+          console.log('🔍 [修复多实例销毁] 完整重置mouseState');
+          this.mouseState = {
+            isDown: false,
+            startX: 0,
+            startY: 0,
+            lastX: 0,
+            lastY: 0,
+            mappedButton: null
+          };
 
           // 3.1 重置所有操作状态标志（修复鼠标操作失效问题）
           console.log('🔍 [修复多实例销毁] 重置所有操作状态标志');
@@ -2043,14 +2047,24 @@ export default {
           this._flipDetectionDone = false;
           this.isWheeling = false;
 
-          // 3.2 清理syncManager操作状态
+          // 3.2 完整重置syncManager操作状态
           if (this.syncManager && this.syncManager.operationState) {
-            console.log('🔍 [修复多实例销毁] 清理syncManager操作状态');
-            this.syncManager.operationState.isDragging = false;
-            this.syncManager.operationState.operationType = null;
+            console.log('🔍 [修复多实例销毁] 完整重置syncManager操作状态');
+            this.syncManager.operationState = {
+              isDragging: false,
+              operationType: null,
+              lastMousePos: { x: 0, y: 0 },
+              operationStartTime: 0
+            };
           }
 
-          // 3.3 检查是否有单例DualCanvasViewer
+          // 3.3 重置同步深度计数器（防止循环同步）
+          if (this.syncManager && typeof this.syncManager.syncDepth !== 'undefined') {
+            console.log('🔍 [修复多实例销毁] 重置syncDepth');
+            this.syncManager.syncDepth = 0;
+          }
+
+          // 3.4 检查是否有单例DualCanvasViewer
           const hasSingletonDualViewer = window.__dualCanvasViewerInstances && window.__dualCanvasViewerInstances.length > 0;
           console.log('🔍 [修复多实例销毁] 检查单例DualCanvasViewer:', { hasSingletonDualViewer });
 
@@ -2061,6 +2075,12 @@ export default {
             if (typeof window !== 'undefined' && window.__unifiedProjectionMode__ !== undefined) {
               window.__unifiedProjectionMode__ = false;
               console.log('🔍 [修复多实例销毁] 已重置全局标志 window.__unifiedProjectionMode__ = false');
+            }
+
+            // 触发Cesium渲染刷新
+            if (this.cesiumViewer && this.cesiumViewer.scene) {
+              this.cesiumViewer.scene.requestRender();
+              console.log('🔍 [修复多实例销毁] Cesium渲染已刷新');
             }
           } else {
             console.log('🔍 [修复多实例销毁] 存在单例DualCanvasViewer，保持统一坐标系模式标志不变');
