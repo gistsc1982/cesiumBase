@@ -104,6 +104,6 @@
   position: absolute;
   width: 16px;
   height: 16px;
-  background-image: url("../Images/TimelineIcons.png");
+  /* background-image: url("../Images/TimelineIcons.png"); 打包时忽略 */
   background-repeat: no-repeat;
 }
