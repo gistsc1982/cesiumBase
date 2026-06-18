@@ -4770,19 +4770,17 @@ async loadTestSfcComponent(instanceId) {
             threeTargetPosition.z
           );
 
-          // 计算方向向量
-          const direction = new window.THREE.Vector3(
+          // 计算方向向量（使用 camera1 的 THREE 上下文）
+          const direction = dualViewer.camera1.position.clone().set(
             threeTargetPosition.x - threeCameraPosition.x,
             threeTargetPosition.y - threeCameraPosition.y,
             threeTargetPosition.z - threeCameraPosition.z
           );
           direction.normalize();
 
-          const dummyCamera = new window.THREE.Camera();
-          dummyCamera.position.set(0, 0, 0);
-          dummyCamera.up.copy(dualViewer.camera1.up);
-          dummyCamera.lookAt(direction.x, direction.y, direction.z);
-          dualViewer.camera1.quaternion.copy(dummyCamera.quaternion);
+          // 使用 camera1 的 quaternion 来计算方向
+          const currentMatrix = dualViewer.camera1.matrix.clone();
+          dualViewer.camera1.lookAt(threeTargetPosition.x, threeTargetPosition.y, threeTargetPosition.z);
 
           dualViewer.controls1.update();
           dualViewer.camera1.updateMatrixWorld();
