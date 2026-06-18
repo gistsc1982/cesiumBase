@@ -1792,12 +1792,22 @@ export default {
       const container = document.createElement('div');
       container.id = containerId;
       container.className = 'dual-canvas-overlay-multiple';
+
+      // ⭐ 获取屏幕高度（使用 screen.availHeight 而非 window.innerHeight）
+      const getScreenHeight = () => {
+        if (window.screen && window.screen.availHeight) {
+          return window.screen.availHeight;
+        }
+        return window.innerHeight;
+      };
+      const actualHeight = getScreenHeight();
+
       container.style.cssText = `
         position: fixed;
         top: 0;
         left: 0;
         width: 100vw;
-        height: 100vh;
+        height: ${actualHeight}px;
         z-index: ${100000 + panelInstanceId * 100};
         background: transparent;
         pointer-events: auto;
@@ -1807,7 +1817,7 @@ export default {
       const contentWrapper = document.createElement('div');
       contentWrapper.style.cssText = `
         width: 100%;
-        height: 100%;
+        height: ${actualHeight}px;
         position: relative;
         pointer-events: auto;
       `;
@@ -1833,10 +1843,69 @@ export default {
         pointer-events: auto;
         box-shadow: 0 2px 8px rgba(0,0,0,0.3);
       `;
-      closeBtn.onclick = () => this.destroyMjsMultiInstance(panelId, panelInstanceId, container);
+      closeBtn.onclick = (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        event.stopImmediatePropagation();
+        this.destroyMjsMultiInstance(panelId, panelInstanceId, container);
+      };
 
       // ⭐ 添加容器到 DOM
       document.body.appendChild(container);
+
+      // ⭐ 强制设置容器高度（修复高度被压缩的问题）- 使用 screen.availHeight 而非 window.innerHeight
+      const forceSetHeight = () => {
+        const vh = window.innerHeight;
+        const actualHeight = getScreenHeight();
+
+        container.style.height = `${actualHeight}px`;
+        container.style.minHeight = `${actualHeight}px`;
+        container.style.maxHeight = `${actualHeight}px`;
+        container.style.setProperty('height', `${actualHeight}px`, 'important');
+
+        if (contentWrapper) {
+          contentWrapper.style.height = `${actualHeight}px`;
+          contentWrapper.style.minHeight = `${actualHeight}px`;
+          contentWrapper.style.maxHeight = `${actualHeight}px`;
+        }
+
+        console.log(`[CesiumMain] 🔧 强制设置容器高度: ${containerId}`, {
+          windowInnerHeight: vh,
+          screenHeight: window.screen?.height,
+          availHeight: window.screen?.availHeight,
+          actualHeight: actualHeight,
+          containerHeight: container.style.height,
+          computedHeight: window.getComputedStyle(container).height,
+          说明: actualHeight > vh ? '使用屏幕高度（窗口被缩小）' : '使用窗口高度'
+        });
+      };
+
+      // 立即设置一次
+      forceSetHeight();
+
+      // 使用 requestAnimationFrame 确保 DOM 更新后再次设置
+      requestAnimationFrame(forceSetHeight);
+      requestAnimationFrame(() => requestAnimationFrame(forceSetHeight));
+
+      // 最后确认：确保使用的是屏幕高度而不是100vh
+      requestAnimationFrame(() => {
+        const finalHeight = getScreenHeight();
+        container.style.height = `${finalHeight}px`;
+        container.style.minHeight = `${finalHeight}px`;
+        container.style.maxHeight = `${finalHeight}px`;
+        container.style.setProperty('height', `${finalHeight}px`, 'important');
+        if (contentWrapper) {
+          contentWrapper.style.height = `${finalHeight}px`;
+          contentWrapper.style.minHeight = `${finalHeight}px`;
+          contentWrapper.style.maxHeight = `${finalHeight}px`;
+        }
+        console.log(`[CesiumMain] 🔧 最终确认容器高度: ${containerId}`, {
+          height: container.style.height,
+          computedHeight: window.getComputedStyle(container).height,
+          使用值: `${finalHeight}px`,
+          说明: '使用屏幕高度而非100vh，避免被压缩'
+        });
+      });
 
       // ⭐ 关键修复：为多实例容器添加所有鼠标事件监听器，确保能操作Cesium
       // 这些事件与单实例容器(dualCanvasContainer)的事件绑定保持一致
@@ -1866,6 +1935,30 @@ export default {
       const Vue = await import('vue');
       const app = Vue.createApp(Component);
       const appInstance = app.mount(contentWrapper);
+
+      // ⭐ 调试：检查挂载后的容器高度
+      setTimeout(() => {
+        const dualCanvasViewer = contentWrapper.querySelector('.dual-canvas-viewer');
+        if (dualCanvasViewer) {
+          console.log(`[CesiumMain] 🔍 挂载后容器高度检查:`, {
+            container: {
+              id: containerId,
+              styleHeight: container.style.height,
+              computedHeight: window.getComputedStyle(container).height,
+              rect: container.getBoundingClientRect()
+            },
+            contentWrapper: {
+              styleHeight: contentWrapper.style.height,
+              computedHeight: window.getComputedStyle(contentWrapper).height,
+              rect: contentWrapper.getBoundingClientRect()
+            },
+            dualCanvasViewer: {
+              computedHeight: window.getComputedStyle(dualCanvasViewer).height,
+              rect: dualCanvasViewer.getBoundingClientRect()
+            }
+          });
+        }
+      }, 300);
 
       console.log(`[CesiumMain] ✅ mjs 多实例已创建: ${containerId}`);
 
@@ -3989,7 +4082,10 @@ async loadTestSfcComponent(instanceId) {
           closeBtn.style.color = 'rgba(255, 255, 255, 0.7)';
         });
 
-        closeBtn.addEventListener('click', () => {
+        closeBtn.addEventListener('click', (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          event.stopImmediatePropagation();
           this.destroyTestSfcInstance(instanceId);
         });
 
@@ -4219,7 +4315,12 @@ async loadTestSfcComponent(instanceId) {
         pointer-events: auto;
         box-shadow: 0 2px 8px rgba(0,0,0,0.3);
       `;
-      closeBtn.onclick = () => this.destroyDualCanvasInstance(instanceId);
+      closeBtn.onclick = (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        event.stopImmediatePropagation();
+        this.destroyDualCanvasInstance(instanceId);
+      };
 
       // ⭐ 添加容器到 DOM（先添加 wrapper，后添加关闭按钮）
       container.appendChild(contentWrapper);
