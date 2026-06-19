@@ -87,6 +87,7 @@ import { panelSingletonManager } from './utils/PanelSingletonManager.js';
 export default {
   name: 'FunctionPanelUIBase',
   mixins: [SfcBase],
+  emits: ['close', 'minimize', 'expand', 'lazy-load', 'register-panel', 'unregister-panel'],
   inject: {
     // 父组件提供的注册方法（可选）
     registerPanelComponent: {
@@ -242,6 +243,28 @@ export default {
       };
     }
   },
+  watch: {
+    /**
+     * ⭐ 监控 isClosed 状态变化（调试用）
+     */
+    isClosed(newVal, oldVal) {
+      console.log(`[FunctionPanelUIBase] 🔄 isClosed 状态变化: ${this.effectiveRegistrationKey}`, {
+        oldVal,
+        newVal,
+        panelRefExists: !!this.$refs.panelRef
+      });
+
+      // 当面板从关闭变为打开时，确保位置正确初始化
+      if (oldVal === true && newVal === false) {
+        console.log(`[FunctionPanelUIBase] ✅ 面板从关闭变为打开，初始化位置`);
+        this.$nextTick(() => {
+          this.$nextTick(() => {
+            this.initPosition();
+          });
+        });
+      }
+    }
+  },
   mounted() {
     // 🔍 调试：打印所有接收到的 props
     console.log(`[FunctionPanelUIBase] 🔍 接收到的 props:`, {
@@ -266,7 +289,8 @@ export default {
     }
 
     // ⭐ 判断是否为多实例面板
-    const isMultiInstance = this.panelInstanceId !== null;
+    // 只有当 panelInstanceId 明确设置为非 null 的数字时才是多实例
+    const isMultiInstance = this.panelInstanceId != null;
 
     console.log(`[FunctionPanelUIBase] 🔍 多实例面板检查:`, {
       panelName: this.effectiveRegistrationKey,
@@ -286,6 +310,14 @@ export default {
           this.isClosed = panel.isClosed;
           console.log(`[FunctionPanelUIBase] 🔓 从 PanelSingletonManager 同步面板状态: ${panelName}, isClosed: ${oldIsClosed} -> ${this.isClosed}`);
         }
+      } else {
+        // ⭐ 面板首次创建，使用 visible prop 的反值作为 isClosed
+        // 如果 visible 为 true（默认），则 isClosed 应为 false
+        const oldIsClosed = this.isClosed;
+        const instanceConfig = this.getInstanceConfig();
+        const shouldBeVisible = instanceConfig ? instanceConfig.visible !== false : true;
+        this.isClosed = !shouldBeVisible;
+        console.log(`[FunctionPanelUIBase] 🆕 面板首次创建，根据配置设置 isClosed: ${panelName}, ${oldIsClosed} -> ${this.isClosed} (visible=${shouldBeVisible})`);
       }
     } else {
       // ⭐ 多实例面板：默认显示（因为它们被创建时就是可见的）
@@ -349,8 +381,12 @@ export default {
     }
 
     this.initCesium(() => {
+      // ⭐ 确保在面板 DOM 创建后再初始化位置
+      // 因为 v-if="!isClosed" 需要额外的渲染周期来创建 panelRef
       this.$nextTick(() => {
-        this.initPosition();
+        this.$nextTick(() => {
+          this.initPosition();
+        });
       });
     });
 
@@ -554,14 +590,39 @@ export default {
      * 初始化面板位置
      */
     initPosition() {
+      // ⭐ 调试：检查面板状态和 panelRef
+      const panelRef = this.$refs.panelRef;
+      const hasPanelRef = !!panelRef;
+      const isClosedValue = this.isClosed;
+
       console.log(`[FunctionPanelUIBase] 🔧 初始化面板位置: ${this.effectiveRegistrationKey} #${this.panelInstanceId || 'singleton'}`, {
         initialX: this.initialX,
         initialY: this.initialY,
-        panelRef: !!this.$refs.panelRef,
+        currentX: this.x,
+        currentY: this.y,
+        panelRef: hasPanelRef,
+        panelRefElement: panelRef ? panelRef.tagName : 'N/A',
+        isClosed: isClosedValue,
         windowInnerWidth: window.innerWidth,
         windowInnerHeight: window.innerHeight,
         panelWidth: this.width
       });
+
+      // ⭐ 如果面板已关闭，不需要初始化位置（元素不存在）
+      // 等待面板打开时通过 isClosed watcher 初始化
+      if (isClosedValue) {
+        console.log(`[FunctionPanelUIBase] ⏸️ 面板已关闭，跳过位置初始化，等待面板打开`);
+        return;
+      }
+
+      // ⭐ 如果 panelRef 还不存在但面板应该打开，延迟执行
+      if (!hasPanelRef) {
+        console.warn(`[FunctionPanelUIBase] ⚠️ panelRef 还不存在，延迟初始化位置`);
+        this.$nextTick(() => {
+          this.initPosition();
+        });
+        return;
+      }
 
       let x = this.initialX;
 
@@ -573,15 +634,25 @@ export default {
       } else if (x === 'right') {
         const panel = this.$refs.panelRef;
         const panelWidth = panel ? panel.offsetWidth : this.width;
-        x = Math.round(window.innerWidth - panelWidth - 20);
-        console.log(`[FunctionPanelUIBase] 📍 右侧对齐计算:`, { panelWidth, calculatedX: x });
+        // ⭐ 修复：增加右边距，让面板更多地在屏幕内可见（至少 50% 可见）
+        // 计算方式：屏幕右侧减去面板宽度，再减去右边距（至少面板宽度的一半）
+        const rightMargin = Math.max(20, panelWidth / 2);
+        x = Math.round(window.innerWidth - panelWidth - rightMargin);
+        console.log(`[FunctionPanelUIBase] 📍 右侧对齐计算:`, {
+          panelWidth,
+          windowInnerWidth: window.innerWidth,
+          rightMargin,
+          calculatedX: x
+        });
       } else if (typeof x !== 'number') {
         x = 20;
         console.log(`[FunctionPanelUIBase] 📍 使用默认 x 值: 20`);
       }
 
-      // 确保 x 在可见范围内
-      x = Math.max(20, Math.min(x, window.innerWidth - this.width - 20));
+      // 确保 x 在可见范围内（至少保留 20px 的左边距）
+      const minX = 20;
+      const maxX = window.innerWidth - this.width - 20;
+      x = Math.max(minX, Math.min(x, maxX));
 
       this.x = x;
       this.y = Math.max(20, Math.min(this.initialY, window.innerHeight - 100));

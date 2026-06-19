@@ -1111,10 +1111,23 @@ export default {
             this.loadFunctionPanel(name).then((component) => {
               this.loadingComponents[name] = false;
 
-              // ⭐ 从多实例配置管理器获取实例特定的配置
-              const instancePanelConfig = multiInstancePanelConfigManager.getPanelConfig(instanceId, name);
+              // ⭐ 根据面板的 singleton 属性决定使用哪个配置管理器
+              const panelConfig = panelConfigs[name];
+              const isSingleton = panelConfig?.singleton === true;
+
+              let instancePanelConfig;
+              if (isSingleton) {
+                // 单例面板：从 FunctionPanelsConfigManager 获取配置
+                instancePanelConfig = window.__functionPanelsConfigManager__
+                  ? window.__functionPanelsConfigManager__.getPanel(name)
+                  : null;
+              } else {
+                // 多实例面板：从 MultiInstancePanelConfigManager 获取配置
+                instancePanelConfig = multiInstancePanelConfigManager.getPanelConfig(instanceId, name);
+              }
 
               console.log(`[CesiumMain #${instanceId}] 🔍 调试面板 ${name}:`, {
+                isSingleton,
                 hasConfig: !!instancePanelConfig,
                 config: instancePanelConfig,
                 visible: instancePanelConfig?.visible,
@@ -1289,22 +1302,33 @@ export default {
 
       // ⭐ 使用 $nextTick 延迟注册，避免在渲染过程中修改响应式数据导致无限循环
       this.$nextTick(() => {
-        // ⭐ 从多实例配置管理器获取实例特定的配置
-        const instancePanelConfig = multiInstancePanelConfigManager.getPanelConfig(instanceId, key);
+        // ⭐ 根据面板的 singleton 属性决定使用哪个配置管理器
+        const panelConfigs = getAvailablePanelConfigs();
+        const panelConfig = panelConfigs[key];
+        const isSingleton = panelConfig?.singleton === true;
 
-        // ⭐ 从 FunctionPanelsConfigManager 获取单例面板配置
-        const functionPanelConfig = window.__functionPanelsConfigManager__
-          ? window.__functionPanelsConfigManager__.getPanel(key)
-          : null;
+        let instancePanelConfig;
+        let functionPanelConfig;
+
+        if (isSingleton) {
+          // 单例面板：只从 FunctionPanelsConfigManager 获取配置
+          functionPanelConfig = window.__functionPanelsConfigManager__
+            ? window.__functionPanelsConfigManager__.getPanel(key)
+            : null;
+        } else {
+          // 多实例面板：只从 MultiInstancePanelConfigManager 获取配置
+          instancePanelConfig = multiInstancePanelConfigManager.getPanelConfig(instanceId, key);
+        }
 
         console.log(`[CesiumMain #${instanceId}] 🔍 调试面板 ${key}:`, {
+          isSingleton,
           instancePanelConfig,
           functionPanelConfig,
           configVisible: config.visible
         });
-        // 合并配置：实例配置优先，然后是传入的配置
+        // 合并配置：使用正确的配置源
         const mergedProps = {
-          ...(instancePanelConfig?.position || {}),
+          ...(instancePanelConfig?.position || functionPanelConfig?.position || {}),
           ...(config.props || {})
         };
 

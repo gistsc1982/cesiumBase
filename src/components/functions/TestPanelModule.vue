@@ -1,6 +1,6 @@
 <template>
   <FunctionPanelUIBase
-    v-bind="$attrs"
+    v-bind="filteredAttrs"
     :title="effectiveTitle"
     :title-icon="effectiveTitleIcon"
     :width="width"
@@ -89,6 +89,7 @@ export default {
     FunctionPanelUIBase
   },
   inheritAttrs: false,
+  emits: ['close', 'minimize', 'expand'],
   props: {
     // 初始位置配置（由配置文件提供）
     initialX: {
@@ -159,6 +160,11 @@ export default {
     },
     effectiveTitleIcon() {
       return this.dynamicContent.titleIcon || this.titleIcon;
+    },
+    // 过滤掉事件处理器，避免重复绑定
+    filteredAttrs() {
+      const { onClose, onMinimize, onExpand, ...rest } = this.$attrs;
+      return rest;
     }
   },
   methods: {
