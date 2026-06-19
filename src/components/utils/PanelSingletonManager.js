@@ -64,23 +64,53 @@ class PanelSingletonManager {
    * @param {Object} state.cesiumHeightOffsets - 高度偏移映射
    * @param {Object} state.cesiumErrorHandlers - 错误处理器映射
    * @param {Array} state.obliquePhotographyList - 倾斜摄影列表状态
+   * @param {Object} state.cesiumObjects - Cesium 对象集合（通用）
+   * @param {Array} state.configList - 配置列表
+   * @param {number} state.timestamp - 时间戳
    */
   savePanelState(panelName, state = {}) {
-    // 创建面板状态对象
-    const panelState = {
-      cesiumTilesets: new Map(state.cesiumTilesets || []),
-      cesiumTransforms: new Map(state.cesiumTransforms || []),
-      cesiumHeightOffsets: new Map(state.cesiumHeightOffsets || []),
-      cesiumErrorHandlers: new Map(state.cesiumErrorHandlers || []),
-      obliquePhotographyList: state.obliquePhotographyList || [],
-      timestamp: Date.now()
-    };
+    // ⭐ 修复：保存所有传入的字段，而不是只保存特定字段
+    // 这允许不同的面板保存不同类型的状态数据
+    const panelState = {};
+
+    // 保存 Map 类型的数据（需要转换为新的 Map 实例）
+    if (state.cesiumTilesets !== undefined) {
+      panelState.cesiumTilesets = new Map(state.cesiumTilesets);
+    }
+    if (state.cesiumTransforms !== undefined) {
+      panelState.cesiumTransforms = new Map(state.cesiumTransforms);
+    }
+    if (state.cesiumHeightOffsets !== undefined) {
+      panelState.cesiumHeightOffsets = new Map(state.cesiumHeightOffsets);
+    }
+    if (state.cesiumErrorHandlers !== undefined) {
+      panelState.cesiumErrorHandlers = new Map(state.cesiumErrorHandlers);
+    }
+
+    // 保存数组类型的数据
+    if (state.obliquePhotographyList !== undefined) {
+      panelState.obliquePhotographyList = state.obliquePhotographyList;
+    }
+    if (state.configList !== undefined) {
+      panelState.configList = state.configList;
+    }
+
+    // 保存对象类型的数据
+    if (state.cesiumObjects !== undefined) {
+      panelState.cesiumObjects = state.cesiumObjects;
+    }
+
+    // 保存时间戳（使用传入的时间戳，如果没有则使用当前时间）
+    panelState.timestamp = state.timestamp !== undefined ? state.timestamp : Date.now();
 
     this.panelStates.set(panelName, panelState);
     console.log(`[PanelSingletonManager] 💾 保存面板状态: ${panelName}`, {
-      tilesets: panelState.cesiumTilesets.size,
-      transforms: panelState.cesiumTransforms.size,
-      items: panelState.obliquePhotographyList.length
+      tilesets: panelState.cesiumTilesets?.size || 0,
+      transforms: panelState.cesiumTransforms?.size || 0,
+      items: panelState.obliquePhotographyList?.length || 0,
+      configList: panelState.configList?.length || 0,
+      cesiumObjects: panelState.cesiumObjects ? '存在' : '不存在',
+      时间: new Date(panelState.timestamp).toLocaleTimeString()
     });
 
     // 暴露到全局（用于调试）
@@ -104,9 +134,11 @@ class PanelSingletonManager {
     }
 
     console.log(`[PanelSingletonManager] 📦 获取面板状态: ${panelName}`, {
-      tilesets: state.cesiumTilesets.size,
-      transforms: state.cesiumTransforms.size,
-      items: state.obliquePhotographyList.length,
+      tilesets: state.cesiumTilesets?.size || 0,
+      transforms: state.cesiumTransforms?.size || 0,
+      items: state.obliquePhotographyList?.length || 0,
+      configList: state.configList?.length || 0,
+      cesiumObjects: state.cesiumObjects ? '存在' : '不存在',
       时间: new Date(state.timestamp).toLocaleTimeString()
     });
 
@@ -124,12 +156,14 @@ class PanelSingletonManager {
       return;
     }
 
-    // 清理 Cesium 错误处理器
-    state.cesiumErrorHandlers.forEach((data, id) => {
-      if (data && data.tileset && data.tileset.tileFailed) {
-        data.tileset.tileFailed.removeEventListener(data.errorHandler);
-      }
-    });
+    // 清理 Cesium 错误处理器（如果存在）
+    if (state.cesiumErrorHandlers) {
+      state.cesiumErrorHandlers.forEach((data, id) => {
+        if (data && data.tileset && data.tileset.tileFailed) {
+          data.tileset.tileFailed.removeEventListener(data.errorHandler);
+        }
+      });
+    }
 
     this.panelStates.delete(panelName);
     console.log(`[PanelSingletonManager] 🗑️ 清除面板状态: ${panelName}`);

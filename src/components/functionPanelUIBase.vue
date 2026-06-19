@@ -311,6 +311,7 @@ export default {
           const oldIsClosed = this.isClosed;
           this.isClosed = eventData.isClosed;
           console.log(`[FunctionPanelUIBase] 🔄 更新 isClosed 状态: ${oldIsClosed} -> ${this.isClosed}`);
+          console.log(`[FunctionPanelUIBase] 🔍 延迟加载检查: oldIsClosed=${oldIsClosed}, !this.isClosed=${!this.isClosed}, this.lazyLoad=${this.lazyLoad}, !this._contentLoaded=${!this._contentLoaded}`);
 
           // ⭐ 如果面板从关闭变为打开，强制 Vue 更新
           if (oldIsClosed && !this.isClosed) {
@@ -323,13 +324,28 @@ export default {
               this._contentLoaded = true;
               // 通知子组件加载内容
               this.$nextTick(() => {
+                console.log(`[FunctionPanelUIBase] 📤 发送 lazy-load 事件`);
                 this.$emit('lazy-load', { firstOpen: true });
               });
+            } else {
+              console.log(`[FunctionPanelUIBase] ⏭️ 跳过延迟加载: lazyLoad=${this.lazyLoad}, _contentLoaded=${this._contentLoaded}`);
             }
+          } else {
+            console.log(`[FunctionPanelUIBase] ⏭️ 不触发延迟加载: 状态不是从关闭变为打开`);
           }
         }
       };
       panelSingletonManager.addEventListener(this.effectiveRegistrationKey, this._panelStateChangeListener);
+    }
+
+    // ⭐ 检查面板初始状态是否为打开（处理面板在组件挂载前就被设置为可见的情况）
+    if (!this.isClosed && this.lazyLoad && !this._contentLoaded) {
+      console.log(`[FunctionPanelUIBase] 🔍 面板初始状态为打开，触发延迟加载: ${this.effectiveRegistrationKey}`);
+      this._contentLoaded = true;
+      this.$nextTick(() => {
+        console.log(`[FunctionPanelUIBase] 📤 发送 lazy-load 事件（初始状态）`);
+        this.$emit('lazy-load', { firstOpen: true });
+      });
     }
 
     this.initCesium(() => {

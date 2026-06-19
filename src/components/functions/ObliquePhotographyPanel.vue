@@ -12,10 +12,12 @@
     :registration-key="registrationKey || 'ObliquePhotographyPanel'"
     :panel-instance-id="panelInstanceId"
     :auto-register="autoRegister !== undefined ? autoRegister : true"
+    :lazy-load="lazyLoad || getConfigLazyLoad()"
     close-event-name="obliquePhotographyPanelClose"
     @close="handleClose"
     @minimize="handleMinimize"
     @expand="handleExpand"
+    @lazy-load="onLazyLoad"
   >
     <!-- 工具栏 -->
     <div class="toolbar">
@@ -615,10 +617,20 @@ export default {
     // ⭐ 检查是否启用延迟加载
     const shouldLazyLoad = this.lazyLoad || this.getConfigLazyLoad();
 
+    console.log(`[${this.componentName}] 🔍 延迟加载检查:`, {
+      thisLazyLoad: this.lazyLoad,
+      configLazyLoad: this.getConfigLazyLoad(),
+      shouldLazyLoad: shouldLazyLoad,
+      lazyLoadProp: this.$props?.lazyLoad,
+      lazyLoadAttr: this.$attrs?.lazyLoad
+    });
+
     if (shouldLazyLoad) {
       console.log(`[${this.componentName}] ⏸️ 延迟加载已启用，等待面板首次打开时加载配置`);
-      // 监听父组件（FunctionPanelUIBase）的 lazy-load 事件
-      this.$once('lazy-load', this.onLazyLoad);
+      // ⭐ 通过 FunctionPanelUIBase 的 @lazy-load 事件监听（Vue 3 兼容）
+      console.log(`[${this.componentName}] 📝 延迟加载事件将通过 @lazy-load 监听`);
+    } else {
+      console.log(`[${this.componentName}] ⏭️ 延迟加载未启用，将立即加载数据`);
     }
 
     this.initCesium(() => {
@@ -628,13 +640,19 @@ export default {
         // ⭐ 始终从服务器加载最新数据，不使用单例管理器缓存的数据
         // 这样确保页面刷新后显示的是最新数据
         console.log(`[${this.componentName}] 📂 从服务器加载最新配置数据`);
-        this.loadFromJson().then(() => {
-          // 数据加载完成后，如果有保存的 Cesium 对象，恢复它们
-          if (hasCesiumObjects) {
-            console.log(`[${this.componentName}] 🔄 恢复 Cesium 对象状态`);
-            this.restoreCesiumObjects();
-          }
-        });
+        this.loadFromJson()
+          .then(() => {
+            // 数据加载完成后，如果有保存的 Cesium 对象，恢复它们
+            if (hasCesiumObjects) {
+              console.log(`[${this.componentName}] 🔄 恢复 Cesium 对象状态`);
+              this.restoreCesiumObjects();
+            }
+          })
+          .catch((error) => {
+            console.error(`[${this.componentName}] ❌ 初始加载失败:`, error);
+            // 确保即使加载失败，也有一个空列表
+            this.obliquePhotographyList = [];
+          });
       } else {
         console.log(`[${this.componentName}] Cesium 已就绪，等待延迟加载触发`);
       }
@@ -700,20 +718,27 @@ export default {
       // 加载配置
       this.initCesium(() => {
         console.log(`[${this.componentName}] Cesium 已就绪，开始延迟加载配置`);
-        this.loadFromJson().then(() => {
-          // 数据加载完成后，如果有保存的 Cesium 对象，恢复它们
-          if (hasCesiumObjects) {
-            console.log(`[${this.componentName}] 🔄 恢复 Cesium 对象状态`);
-            this.restoreCesiumObjects();
-          }
-        });
+        this.loadFromJson()
+          .then(() => {
+            // 数据加载完成后，如果有保存的 Cesium 对象，恢复它们
+            if (hasCesiumObjects) {
+              console.log(`[${this.componentName}] 🔄 恢复 Cesium 对象状态`);
+              this.restoreCesiumObjects();
+            }
+          })
+          .catch((error) => {
+            console.error(`[${this.componentName}] ❌ 延迟加载失败:`, error);
+            // 确保即使加载失败，也有一个空列表而不是 undefined
+            if (!this.obliquePhotographyList || this.obliquePhotographyList.length === 0) {
+              this.obliquePhotographyList = [];
+            }
+          });
       });
     },
 
-    // ==================== 单例模式状态恢复 ====================
+    // ==================== 事件处理 ====================
 
-    /**
-     * 恢复 Cesium 对象到场景中
+    handleClose() {
       console.log(`[${this.componentName}] 面板假关闭（单实例模式）`);
       // ⭐ 触发自定义事件，通知父组件假关闭（不销毁组件）
       if (typeof window !== 'undefined') {
@@ -783,6 +808,7 @@ export default {
     async loadFromJson() {
       try {
         console.log(`[${this.componentName}] 📂 开始加载配置数据: ${CONFIG_ID}`);
+        console.log(`[${this.componentName}] 🔍 当前列表长度: ${this.obliquePhotographyList?.length || 0}`);
 
         let data = null;
         let dataSource = '';

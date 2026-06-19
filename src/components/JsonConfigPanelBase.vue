@@ -1,6 +1,7 @@
 <template>
   <!-- 主面板 -->
   <FunctionPanelUIBase
+    ref="basePanel"
     :title="panelTitle"
     :title-icon="panelIcon"
     :width="panelWidth"
@@ -10,11 +11,13 @@
     :allow-minimize="true"
     :close-event-name="closeEventName"
     :auto-register="autoRegister !== false"
-    :registration-key="effectivePanelName"
+    :registration-key="effectiveRegistrationKey"
     :panel-instance-id="panelInstanceId"
+    :lazy-load="lazyLoad || getConfigLazyLoad()"
     @close="handleClose"
     @minimize="handleMinimize"
     @expand="handleExpand"
+    @lazy-load="onLazyLoad"
   >
     <!-- 工具栏 -->
     <div class="toolbar">
@@ -506,14 +509,60 @@ export default {
 
     if (shouldLazyLoad) {
       console.log(`[${this.effectivePanelName}] ⏸️ 延迟加载已启用，等待面板首次打开时加载配置`);
-      // 监听父组件（FunctionPanelUIBase）的 lazy-load 事件
-      this.$once('lazy-load', this.onLazyLoad);
+      // ⭐ lazy-load 事件将通过 FunctionPanelUIBase 的 @lazy-load 传递
+      console.log(`[${this.effectivePanelName}] 📝 延迟加载事件将通过 @lazy-load 监听`);
+    } else {
+      console.log(`[${this.effectivePanelName}] ⏭️ 延迟加载未启用，将立即加载配置`);
+    }
+
+    // ⭐ 检查是否有保存的配置列表缓存（支持单例和多实例）
+    const isMultiInstance = this.panelInstanceId !== null;
+    let savedStateWithConfig = null;
+
+    if (isMultiInstance) {
+      // 多实例模式：从 MultiInstancePanelConfigManager 获取缓存
+      if (typeof window !== 'undefined' && window.__multiInstancePanelConfigManager__ && typeof window.__multiInstancePanelConfigManager__.getPanelInstanceCache === 'function') {
+        savedStateWithConfig = window.__multiInstancePanelConfigManager__.getPanelInstanceCache(
+          this.instanceId || 1,
+          this.effectiveRegistrationKey,
+          this.panelInstanceId
+        );
+      }
+    } else {
+      // 单例模式：从 PanelSingletonManager 获取缓存
+      // ⭐ 修复：使用 effectiveRegistrationKey 而不是 effectivePanelName
+      savedStateWithConfig = panelSingletonManager.getPanelState(this.effectiveRegistrationKey);
+    }
+
+    let _configRestoredFromCache = false; // ⭐ 标记是否从缓存恢复了配置
+
+    if (savedStateWithConfig && savedStateWithConfig.configList && savedStateWithConfig.configList.length > 0) {
+      // 检查缓存是否过期（5分钟）
+      const cacheAge = Date.now() - (savedStateWithConfig.timestamp || 0);
+      // ⭐ 修复：移除 !shouldLazyLoad 条件
+      // 理由：单例面板只在第一次挂载时执行 mounted，重新打开时不会再次执行
+      // 如果启用延迟加载，缓存在 onLazyLoad 中恢复
+      // 如果不启用延迟加载，应该在这里恢复缓存
+      if (cacheAge < 5 * 60 * 1000) {
+        console.log(`[${this.effectivePanelName}] 📦 从缓存恢复配置列表 (${savedStateWithConfig.configList.length} 条) ${isMultiInstance ? '(多实例)' : '(单例)'}`);
+        this.configList = savedStateWithConfig.configList;
+        _configRestoredFromCache = true; // ⭐ 标记已从缓存恢复
+      } else {
+        console.log(`[${this.effectivePanelName}] ⏭️ 缓存已过期，将重新加载`);
+      }
     }
 
     this.initCesium(() => {
       if (!shouldLazyLoad) {
-        console.log(`[${this.effectivePanelName}] Cesium 已就绪，开始加载配置`);
-        this.loadConfig();
+        // ⭐ 如果已经从缓存恢复了配置，就不需要重新加载
+        if (_configRestoredFromCache) {
+          console.log(`[${this.effectivePanelName}] ✅ 配置已从缓存恢复，跳过重新加载`);
+          // 调用 onConfigLoaded 通知子类配置已加载完成
+          this.onConfigLoaded();
+        } else {
+          console.log(`[${this.effectivePanelName}] Cesium 已就绪，开始加载配置`);
+          this.loadConfig();
+        }
       } else {
         console.log(`[${this.effectivePanelName}] Cesium 已就绪，等待延迟加载触发`);
       }
@@ -523,11 +572,45 @@ export default {
   beforeUnmount() {
     const cesiumObjects = this.getCesiumObjects();
     if (cesiumObjects) {
-      panelSingletonManager.savePanelState(this.effectivePanelName, {
-        cesiumObjects: cesiumObjects,
-        configList: []
-      });
-      console.log(`[${this.effectivePanelName}] 💾 Cesium 对象已保存`);
+      // ⭐ 判断是单例还是多实例
+      const isMultiInstance = this.panelInstanceId !== null;
+
+      if (isMultiInstance) {
+        // 多实例模式：每个实例独立缓存，使用 panelInstanceId 作为键
+        if (typeof window !== 'undefined' && window.__multiInstancePanelConfigManager__ && typeof window.__multiInstancePanelConfigManager__.savePanelInstanceCache === 'function') {
+          window.__multiInstancePanelConfigManager__.savePanelInstanceCache(
+            this.instanceId || 1,
+            this.effectiveRegistrationKey,
+            this.panelInstanceId,
+            {
+              cesiumObjects: cesiumObjects,
+              configList: this.configList.map(item => ({
+                id: item.id,
+                name: item.name,
+                url: item.url,
+                loaded: false,
+                loading: false
+              })),
+              timestamp: Date.now()
+            }
+          );
+          console.log(`[${this.effectivePanelName}] 💾 多实例缓存已保存 (#${this.panelInstanceId})`);
+        }
+      } else {
+        // 单例模式：使用 PanelSingletonManager
+        panelSingletonManager.savePanelState(this.effectiveRegistrationKey, {
+          cesiumObjects: cesiumObjects,
+          configList: this.configList.map(item => ({
+            id: item.id,
+            name: item.name,
+            url: item.url,
+            loaded: false,
+            loading: false
+          })),
+          timestamp: Date.now()
+        });
+        console.log(`[${this.effectivePanelName}] 💾 单例缓存已保存 (configList: ${this.configList.length} 条)`);
+      }
     }
   },
 
@@ -542,6 +625,17 @@ export default {
         return `${this.panelName}_${this.panelInstanceId}`;
       }
       return this.panelName;
+    },
+    /**
+     * ⭐ 有效的注册键（用于 FunctionPanelUIBase）
+     * 对于多实例面板，使用 registrationKey_panelInstanceId 格式
+     * 对于单例面板，直接使用 registrationKey
+     */
+    effectiveRegistrationKey() {
+      if (this.panelInstanceId !== null) {
+        return `${this.registrationKey || this.panelName}_${this.panelInstanceId}`;
+      }
+      return this.registrationKey || this.panelName;
     },
     currentDirectoryFiles() {
       if (!this.currentServerDirectory) {
@@ -640,14 +734,87 @@ export default {
     },
 
     /**
+     * 获取面板的延迟加载配置
+     * @returns {boolean} 是否启用延迟加载
+     */
+    getConfigLazyLoad() {
+      if (typeof window !== 'undefined' && window.__functionPanelsConfig__) {
+        const config = window.__functionPanelsConfig__.panels.find(
+          p => p.name === this.effectiveRegistrationKey
+        );
+        return config ? config.lazyLoad === true : false;
+      }
+      return false;
+    },
+
+    /**
      * 处理延迟加载触发
      * 当面板首次打开时调用
      */
     onLazyLoad(eventData) {
       console.log(`[${this.panelName}] ⚡ 延迟加载触发，首次打开面板`, eventData);
 
+      // ⭐ 检查当前是否已经有配置列表（可能已经从 mounted 缓存恢复）
+      console.log(`[${this.panelName}] 🔍 当前 configList 状态:`, {
+        length: this.configList.length,
+        isEmpty: this.configList.length === 0
+      });
+
+      // ⭐ 检查是否有保存的配置列表缓存（支持单例和多实例）
+      const isMultiInstance = this.panelInstanceId !== null;
+      let savedStateWithConfig = null;
+
+      if (isMultiInstance) {
+        // 多实例模式：从 MultiInstancePanelConfigManager 获取缓存
+        if (typeof window !== 'undefined' && window.__multiInstancePanelConfigManager__ && typeof window.__multiInstancePanelConfigManager__.getPanelInstanceCache === 'function') {
+          savedStateWithConfig = window.__multiInstancePanelConfigManager__.getPanelInstanceCache(
+            this.instanceId || 1,
+            this.effectiveRegistrationKey,
+            this.panelInstanceId
+          );
+        }
+      } else {
+        // 单例模式：从 PanelSingletonManager 获取缓存
+        savedStateWithConfig = panelSingletonManager.getPanelState(this.effectiveRegistrationKey);
+      }
+
+      console.log(`[${this.panelName}] 🔍 缓存状态:`, {
+        hasCache: !!savedStateWithConfig,
+        hasConfigList: !!(savedStateWithConfig && savedStateWithConfig.configList),
+        configListLength: savedStateWithConfig?.configList?.length || 0,
+        timestamp: savedStateWithConfig?.timestamp ? new Date(savedStateWithConfig.timestamp).toLocaleTimeString() : 'N/A',
+        age: savedStateWithConfig?.timestamp ? `${Math.round((Date.now() - savedStateWithConfig.timestamp) / 1000)}秒` : 'N/A'
+      });
+
       // 加载配置
       this.initCesium(() => {
+        // 检查 Cesium 对象缓存
+        const savedState = panelSingletonManager.getPanelState(this.effectiveRegistrationKey);
+        const hasCesiumObjects = savedState && savedState.cesiumObjects;
+
+        if (hasCesiumObjects) {
+          console.log(`[${this.effectivePanelName}] 📦 恢复保存的 Cesium 对象（延迟加载）`);
+          this.restoreCesiumObjects(savedState.cesiumObjects);
+        }
+
+        // 检查配置列表缓存
+        if (savedStateWithConfig && savedStateWithConfig.configList && savedStateWithConfig.configList.length > 0) {
+          // 检查缓存是否过期（5分钟）
+          const cacheAge = Date.now() - (savedStateWithConfig.timestamp || 0);
+          if (cacheAge < 5 * 60 * 1000) {
+            console.log(`[${this.panelName}] 📦 从缓存恢复配置列表 (${savedStateWithConfig.configList.length} 条) ${isMultiInstance ? '(多实例)' : '(单例)'}`);
+            this.configList = savedStateWithConfig.configList;
+            console.log(`[${this.panelName}] ✅ 配置已从缓存恢复，跳过重新加载`);
+            console.log(`[${this.panelName}] ✅ 恢复后的 configList 长度:`, this.configList.length);
+            this.onConfigLoaded();
+            return;
+          } else {
+            console.log(`[${this.panelName}] ⏭️ 缓存已过期 (${Math.round(cacheAge / 1000)}秒)，将重新加载`);
+          }
+        } else {
+          console.log(`[${this.panelName}] ⏭️ 没有有效缓存，将重新加载`);
+        }
+
         console.log(`[${this.panelName}] Cesium 已就绪，开始延迟加载配置`);
         this.loadConfig();
       });
@@ -782,9 +949,37 @@ export default {
       return data.map(item => ({ ...item }));
     },
 
-    async refreshConfig() {
+    async refreshConfig(forceRefresh = true) {
+      if (forceRefresh) {
+        console.log(`[${this.panelName}] 🔄 强制刷新配置 (绕过缓存)`);
+        // 清除本地缓存
+        this.configList = [];
+
+        // 根据模式清除对应的缓存
+        const isMultiInstance = this.panelInstanceId !== null;
+        if (isMultiInstance) {
+          // 多实例模式：清除 MultiInstancePanelConfigManager 中的缓存
+          if (typeof window !== 'undefined' && window.__multiInstancePanelConfigManager__ && typeof window.__multiInstancePanelConfigManager__.clearPanelInstanceCache === 'function') {
+            window.__multiInstancePanelConfigManager__.clearPanelInstanceCache(
+              this.instanceId || 1,
+              this.effectiveRegistrationKey,
+              this.panelInstanceId
+            );
+            console.log(`[${this.panelName}] 🗑️ 多实例缓存已清除 (#${this.panelInstanceId})`);
+          }
+        } else {
+          // 单例模式：清除 PanelSingletonManager 中的缓存
+          panelSingletonManager.savePanelState(this.effectiveRegistrationKey, {
+            cesiumObjects: { cesiumTilesets: new Map(), cesiumTransforms: new Map(), cesiumHeightOffsets: new Map() },
+            configList: [],
+            timestamp: 0
+          });
+          console.log(`[${this.panelName}] 🗑️ 单例缓存已清除`);
+        }
+      } else {
+        console.log(`[${this.panelName}] 🔄 正常刷新配置`);
+      }
       await this.loadConfig();
-      console.log(`[${this.panelName}] 🔄 配置已刷新`);
     },
 
     async saveConfig() {
@@ -1129,6 +1324,58 @@ export default {
 
     handleClose() {
       console.log(`[${this.panelName}] 面板关闭`);
+
+      // ⭐ 单例模式：在关闭时保存缓存（因为 beforeUnmount 不会被调用）
+      const isMultiInstance = this.panelInstanceId !== null;
+      console.log(`[${this.panelName}] 🔍 面板模式检查:`, {
+        isMultiInstance: isMultiInstance,
+        panelInstanceId: this.panelInstanceId,
+        effectiveRegistrationKey: this.effectiveRegistrationKey,
+        currentConfigListLength: this.configList.length
+      });
+
+      if (!isMultiInstance) {
+        const cesiumObjects = this.getCesiumObjects();
+        console.log(`[${this.panelName}] 🔍 Cesium 对象检查:`, {
+          hasCesiumObjects: !!cesiumObjects
+        });
+
+        if (cesiumObjects) {
+          // 单例模式：使用 PanelSingletonManager
+          panelSingletonManager.savePanelState(this.effectiveRegistrationKey, {
+            cesiumObjects: cesiumObjects,
+            configList: this.configList.map(item => ({
+              id: item.id,
+              name: item.name,
+              url: item.url,
+              loaded: false,
+              loading: false
+            })),
+            timestamp: Date.now()
+          });
+          console.log(`[${this.panelName}] 💾 单例缓存已保存（关闭时）(configList: ${this.configList.length} 条, key: ${this.effectiveRegistrationKey})`);
+
+          // 验证缓存是否正确保存
+          const verifyState = panelSingletonManager.getPanelState(this.effectiveRegistrationKey);
+          console.log(`[${this.panelName}] 🔍 缓存验证:`, {
+                hasState: !!verifyState,
+                hasConfigList: !!(verifyState && verifyState.configList),
+                configListLength: verifyState?.configList?.length || 0,
+                timestamp: verifyState?.timestamp ? new Date(verifyState.timestamp).toLocaleTimeString() : 'N/A'
+          });
+        } else {
+          console.warn(`[${this.panelName}] ⚠️ 没有 Cesium 对象，跳过缓存保存`);
+        }
+
+        // ⭐ 关键修复：重置父组件的 _contentLoaded 标志，以便下次打开时能重新触发延迟加载
+        if (this.$refs.basePanel && this.$refs.basePanel._contentLoaded !== undefined) {
+          const oldState = this.$refs.basePanel._contentLoaded;
+          this.$refs.basePanel._contentLoaded = false;
+          console.log(`[${this.panelName}] 🔄 重置 _contentLoaded 标志: ${oldState} -> false`);
+        }
+      } else {
+        console.log(`[${this.panelName}] ℹ️ 多实例模式，跳过单例缓存保存`);
+      }
 
       // ⭐ 不要重复触发 close 事件，因为父类 FunctionPanelUIBase 已经处理了
       // 这里只需要清理组件状态即可
