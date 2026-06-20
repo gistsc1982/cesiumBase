@@ -18,6 +18,7 @@
         :tooltip="button.tooltip"
         :active="button.active"
         :disabled="button.disabled"
+        :lazy-load="button.lazyLoad"
         :aria-label="button.ariaLabel || button.label"
         @click="handleButtonClick(button)"
       />
@@ -245,17 +246,25 @@ export default {
       if (this.panelConfigs && this.panelConfigs.length > 0) {
         buttons = this.panelConfigs
           .filter(config => config.enabled !== false)
-          .map(config => ({
-            id: config.name,
-            icon: config.icon || '📄',
-            label: config.title || config.name,
-            tooltip: config.description || config.title,
-            disabled: false,
-            ariaLabel: config.title || config.name,
-            action: 'toggle-panel',
-            panelId: config.name,
-            singleton: config.singleton !== false
-          }));
+          .map(config => {
+            // ⭐ 只有 .mjs 类型的面板才需要懒加载禁用处理
+            const isMjsPanel = config.file && config.file.endsWith('.mjs');
+            const needsLazyLoad = config.lazyLoad === true && isMjsPanel;
+
+            return {
+              id: config.name,
+              icon: config.icon || '📄',
+              label: config.title || config.name,
+              tooltip: config.description || config.title,
+              // ⭐ 只有 .mjs 懒加载面板初始状态为禁用
+              disabled: needsLazyLoad,
+              ariaLabel: config.title || config.name,
+              action: 'toggle-panel',
+              panelId: config.name,
+              singleton: config.singleton !== false,
+              lazyLoad: needsLazyLoad
+            };
+          });
 
         console.log('[CesiumToolbar] 📋 从配置生成按钮:', buttons.map(b => ({ id: b.id, singleton: b.singleton })));
       } else {
@@ -438,6 +447,37 @@ export default {
     toggleCollapse() {
       this.isCollapsed = !this.isCollapsed;
       this.$emit('toggle-collapse', this.isCollapsed);
+    },
+
+    /**
+     * 更新面板按钮状态
+     * @param {string} panelId - 面板ID
+     * @param {Object} state - 按钮状态 { disabled, loaded, active }
+     */
+    updatePanelButtonState(panelId, state) {
+      console.log(`[CesiumToolbar] 🔧 更新按钮状态: ${panelId}`, state);
+
+      // 找到对应的按钮配置
+      const button = this.defaultButtons.find(btn => btn.panelId === panelId);
+      if (button) {
+        // 更新按钮状态
+        if (state.disabled !== undefined) {
+          button.disabled = state.disabled;
+        }
+        if (state.loaded !== undefined) {
+          button.loaded = state.loaded;
+        }
+        if (state.active !== undefined) {
+          button.active = state.active;
+        }
+        console.log(`[CesiumToolbar] ✅ 按钮状态已更新: ${panelId}`, {
+          disabled: button.disabled,
+          loaded: button.loaded,
+          active: button.active
+        });
+      } else {
+        console.warn(`[CesiumToolbar] ⚠️ 未找到面板按钮: ${panelId}`);
+      }
     }
   }
 };

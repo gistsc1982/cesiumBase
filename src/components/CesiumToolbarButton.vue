@@ -15,7 +15,7 @@
 
     <!-- Tooltip -->
     <span class="button-tooltip" role="tooltip" aria-hidden="true">
-      {{ tooltip }}
+      {{ computedTooltip }}
     </span>
   </button>
 </template>
@@ -30,6 +30,7 @@
  * @features
  * - 支持 active 状态（高亮显示）
  * - 支持 disabled 状态（置灰且禁用）
+ * - 支持 lazyLoad 状态（懒加载面板，禁用但可点击触发加载）
  * - 内置 tooltip 提示
  * - 完整的可访问性支持
  * - 流畅的过渡动画
@@ -104,6 +105,16 @@ export default {
     },
 
     /**
+     * 是否懒加载（禁用但可点击触发加载）
+     * @type {boolean}
+     * @default false
+     */
+    lazyLoad: {
+      type: Boolean,
+      default: false
+    },
+
+    /**
      * ARIA 标签（用于可访问性）
      * @type {string}
      * @default ''
@@ -125,7 +136,8 @@ export default {
         'toolbar-button',
         {
           'toolbar-button--active': this.active,
-          'toolbar-button--disabled': this.disabled
+          'toolbar-button--disabled': this.disabled && !this.lazyLoad,
+          'toolbar-button--lazy': this.lazyLoad
         }
       ]
     },
@@ -139,6 +151,13 @@ export default {
       }
       // 如果有标签，使用标签；否则使用 tooltip
       return this.label || this.tooltip || '工具按钮'
+    },
+
+    /**
+     * 计算显示的 tooltip 文本
+     */
+    computedTooltip() {
+      return this.tooltip
     }
   },
 
@@ -147,6 +166,13 @@ export default {
      * 处理点击事件
      */
     handleClick(event) {
+      // ⭐ 懒加载按钮：虽然 disabled=true，但允许点击触发加载
+      if (this.lazyLoad) {
+        console.log(`[CesiumToolbarButton] 懒加载按钮被点击: ${this.label}`)
+        this.$emit('click', event)
+        return
+      }
+
       if (this.disabled) {
         event.preventDefault()
         return
@@ -290,6 +316,34 @@ export default {
 .toolbar-button--disabled .button-tooltip {
   opacity: 0;
   visibility: hidden;
+}
+
+/* ⭐ 懒加载状态 - 禁用但可点击 */
+.toolbar-button--lazy {
+  opacity: 0.6;
+  cursor: pointer;
+}
+
+.toolbar-button--lazy:hover {
+  opacity: 0.8;
+  background: rgba(59, 130, 246, 0.15); /* 蓝色提示 */
+  transform: translateY(-1px);
+}
+
+.toolbar-button--lazy .button-tooltip {
+  opacity: 1;
+  visibility: visible;
+  color: #60A5FA; /* 浅蓝色 */
+}
+
+/* ⭐ 懒加载按钮的加载指示器 */
+.toolbar-button--lazy::after {
+  content: '⏳';
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  font-size: 10px;
+  opacity: 0.8;
 }
 
 /* 焦点状态 - 键盘导航 */
