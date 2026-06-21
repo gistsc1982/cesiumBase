@@ -341,6 +341,7 @@ import FunctionPanelUIBase from './FunctionPanelUIBase.vue';
 import SfcBase from './SfcBase.vue';
 import { dataManager } from '../utils/DataManager.js';
 import { panelSingletonManager } from './utils/PanelSingletonManager.js';
+const globalPanelSingletonManager = typeof window !== 'undefined' && window.__panelSingletonManager__ || panelSingletonManager;
 
 export default {
   name: 'JsonConfigPanelBase',
@@ -499,7 +500,7 @@ export default {
   },
 
   mounted() {
-    const savedState = panelSingletonManager.getPanelState(this.effectivePanelName);
+    const savedState = globalPanelSingletonManager.getPanelState(this.effectivePanelName);
     const hasCesiumObjects = savedState && savedState.cesiumObjects;
 
     if (hasCesiumObjects) {
@@ -535,7 +536,7 @@ export default {
     } else {
       // 单例模式：从 PanelSingletonManager 获取缓存
       // ⭐ 修复：使用 effectiveRegistrationKey 而不是 effectivePanelName
-      savedStateWithConfig = panelSingletonManager.getPanelState(this.effectiveRegistrationKey);
+      savedStateWithConfig = globalPanelSingletonManager.getPanelState(this.effectiveRegistrationKey);
     }
 
     let _configRestoredFromCache = false; // ⭐ 标记是否从缓存恢复了配置
@@ -602,7 +603,7 @@ export default {
         }
       } else {
         // 单例模式：使用 PanelSingletonManager
-        panelSingletonManager.savePanelState(this.effectiveRegistrationKey, {
+        globalPanelSingletonManager.savePanelState(this.effectiveRegistrationKey, {
           cesiumObjects: cesiumObjects,
           configList: this.configList.map(item => ({
             id: item.id,
@@ -779,7 +780,7 @@ export default {
         }
       } else {
         // 单例模式：从 PanelSingletonManager 获取缓存
-        savedStateWithConfig = panelSingletonManager.getPanelState(this.effectiveRegistrationKey);
+        savedStateWithConfig = globalPanelSingletonManager.getPanelState(this.effectiveRegistrationKey);
       }
 
       console.log(`[${this.panelName}] 🔍 缓存状态:`, {
@@ -793,7 +794,7 @@ export default {
       // 加载配置
       this.initCesium(() => {
         // 检查 Cesium 对象缓存
-        const savedState = panelSingletonManager.getPanelState(this.effectiveRegistrationKey);
+        const savedState = globalPanelSingletonManager.getPanelState(this.effectiveRegistrationKey);
         const hasCesiumObjects = savedState && savedState.cesiumObjects;
 
         if (hasCesiumObjects) {
@@ -973,7 +974,7 @@ export default {
           }
         } else {
           // 单例模式：清除 PanelSingletonManager 中的缓存
-          panelSingletonManager.savePanelState(this.effectiveRegistrationKey, {
+          globalPanelSingletonManager.savePanelState(this.effectiveRegistrationKey, {
             cesiumObjects: { cesiumTilesets: new Map(), cesiumTransforms: new Map(), cesiumHeightOffsets: new Map() },
             configList: [],
             timestamp: 0
@@ -1346,7 +1347,7 @@ export default {
 
         if (cesiumObjects) {
           // 单例模式：使用 PanelSingletonManager
-          panelSingletonManager.savePanelState(this.effectiveRegistrationKey, {
+          globalPanelSingletonManager.savePanelState(this.effectiveRegistrationKey, {
             cesiumObjects: cesiumObjects,
             configList: this.configList.map(item => ({
               id: item.id,
@@ -1360,7 +1361,7 @@ export default {
           console.log(`[${this.panelName}] 💾 单例缓存已保存（关闭时）(configList: ${this.configList.length} 条, key: ${this.effectiveRegistrationKey})`);
 
           // 验证缓存是否正确保存
-          const verifyState = panelSingletonManager.getPanelState(this.effectiveRegistrationKey);
+          const verifyState = globalPanelSingletonManager.getPanelState(this.effectiveRegistrationKey);
           console.log(`[${this.panelName}] 🔍 缓存验证:`, {
                 hasState: !!verifyState,
                 hasConfigList: !!(verifyState && verifyState.configList),

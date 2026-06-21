@@ -358,6 +358,7 @@ import FunctionPanelUIBase from '../FunctionPanelUIBase.vue';
 import SfcBase from '../SfcBase.vue';
 import ObliqueHeightAdjustPanel from './ObliqueHeightAdjustPanel.vue';
 import { panelSingletonManager } from '../utils/PanelSingletonManager.js';
+const globalPanelSingletonManager = typeof window !== 'undefined' && window.__panelSingletonManager__ || panelSingletonManager;
 import { dataManager } from '../../utils/DataManager.js';
 
 const JSON_FILE_PATH = '/data/gis/oblique_photography.json';
@@ -590,11 +591,11 @@ export default {
         }
       }
     };
-    panelSingletonManager.addEventListener(this.componentName, this._panelStateChangeListener);
+    globalPanelSingletonManager.addEventListener(this.componentName, this._panelStateChangeListener);
     console.log(`[${this.componentName}] 📝 已注册面板状态监听器`);
 
     // ⭐ 单例模式：检查是否有保存的 Cesium 对象状态
-    const savedState = panelSingletonManager.getPanelState(this.componentName);
+    const savedState = globalPanelSingletonManager.getPanelState(this.componentName);
     const hasCesiumObjects = savedState && savedState.cesiumTilesets && savedState.cesiumTilesets.size > 0;
 
     if (hasCesiumObjects) {
@@ -664,7 +665,7 @@ export default {
 
     // 保存面板状态到单例管理器（只保存 Cesium 对象，不保存数据列表）
     // 数据列表总是从服务器加载最新数据
-    panelSingletonManager.savePanelState(this.componentName, {
+    globalPanelSingletonManager.savePanelState(this.componentName, {
       cesiumTilesets: this._cesiumTilesets,
       cesiumTransforms: this._cesiumTransforms,
       cesiumHeightOffsets: this._cesiumHeightOffsets,
@@ -712,7 +713,7 @@ export default {
       console.log(`[${this.componentName}] ⚡ 延迟加载触发，首次打开面板`, eventData);
 
       // 检查是否有保存的 Cesium 对象状态
-      const savedState = panelSingletonManager.getPanelState(this.componentName);
+      const savedState = globalPanelSingletonManager.getPanelState(this.componentName);
       const hasCesiumObjects = savedState && savedState.cesiumTilesets && savedState.cesiumTilesets.size > 0;
 
       // 加载配置

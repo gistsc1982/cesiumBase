@@ -114,9 +114,13 @@ class PanelSingletonManager {
     });
 
     // 暴露到全局（用于调试）
+    // ⭐ 同时设置两个全局变量，确保兼容性
     if (typeof window !== 'undefined') {
       if (!window.__panelSingletonManager__) {
         window.__panelSingletonManager__ = this;
+      }
+      if (!window.panelSingletonManager) {
+        window.panelSingletonManager = this;
       }
     }
   }
@@ -666,6 +670,14 @@ class PanelSingletonManager {
   }
 }
 
-// 导出全局单例
-export const panelSingletonManager = new PanelSingletonManager();
+// 导出全局单例（优先使用已存在的全局实例，确保只有一个实例）
+const existingManager = typeof window !== 'undefined' && (window.__panelSingletonManager__ || window.panelSingletonManager);
+export const panelSingletonManager = existingManager || new PanelSingletonManager();
+
+// 如果是新创建的实例，同时设置两个全局变量
+if (!existingManager && typeof window !== 'undefined') {
+  window.__panelSingletonManager__ = panelSingletonManager;
+  window.panelSingletonManager = panelSingletonManager;
+}
+
 export default panelSingletonManager;

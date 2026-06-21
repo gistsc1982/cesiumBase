@@ -79,7 +79,10 @@
 
 <script>
 import SfcBase from './SfcBase.vue';
+
+// ⭐ 优先使用全局的 panelSingletonManager，确保所有组件使用同一个实例
 import { panelSingletonManager } from './utils/PanelSingletonManager.js';
+const globalPanelSingletonManager = typeof window !== 'undefined' && window.__panelSingletonManager__ || panelSingletonManager;
 
 // 导入注册相关的工具（可选，如果子组件需要全局注册）
 // import { getRegistry, createRegistrationMixin } from '../utils/ComponentRegistry.js';
@@ -303,8 +306,8 @@ export default {
     // 多实例面板不应该从 PanelSingletonManager 同步状态，因为它们由 MultiInstancePanelConfigManager 管理
     if (!isMultiInstance) {
       const panelName = this.effectiveRegistrationKey;
-      if (panelSingletonManager.hasPanel(panelName)) {
-        const panel = panelSingletonManager.getPanel(panelName);
+      if (globalPanelSingletonManager.hasPanel(panelName)) {
+        const panel = globalPanelSingletonManager.getPanel(panelName);
         if (panel) {
           const oldIsClosed = this.isClosed;
           this.isClosed = panel.isClosed;
@@ -374,7 +377,7 @@ export default {
           }
         }
       };
-      panelSingletonManager.addEventListener(this.effectiveRegistrationKey, this._panelStateChangeListener);
+      globalPanelSingletonManager.addEventListener(this.effectiveRegistrationKey, this._panelStateChangeListener);
     }
 
     // ⭐ 检查面板初始状态是否为打开（处理面板在组件挂载前就被设置为可见的情况）
@@ -420,7 +423,7 @@ export default {
     // 多实例面板不需要监听 PanelSingletonManager 事件
     const isMultiInstance = this.panelInstanceId !== null;
     if (!isMultiInstance && this._panelStateChangeListener) {
-      panelSingletonManager.removeEventListener(this.effectiveRegistrationKey, this._panelStateChangeListener);
+      globalPanelSingletonManager.removeEventListener(this.effectiveRegistrationKey, this._panelStateChangeListener);
     }
 
     this.cleanup();
@@ -514,9 +517,8 @@ export default {
         // ⭐ 单例面板：不传递组件实例（组件已在预加载时加载）
         // ⭐ 关键修复：优先使用 PanelSingletonManager 中的状态（用户点击按钮时设置）
         let actualVisible = false;
-        const panelSingletonManager = window.panelSingletonManager || window.__panelSingletonManager__;
-        if (panelSingletonManager) {
-          const existingPanel = panelSingletonManager.getPanel(this.effectiveRegistrationKey);
+        if (globalPanelSingletonManager) {
+          const existingPanel = globalPanelSingletonManager.getPanel(this.effectiveRegistrationKey);
           console.log(`[FunctionPanelUIBase] 🔍 检查面板 ${this.effectiveRegistrationKey}:`, {
             existingPanel: existingPanel ? {
               visible: existingPanel.visible,
@@ -865,7 +867,7 @@ export default {
         }
 
         // ⭐ 使用 PanelSingletonManager 更新面板注册表状态（统一使用 updatePanelVisible）
-        panelSingletonManager.updatePanelVisible(this.effectiveRegistrationKey, false);
+        globalPanelSingletonManager.updatePanelVisible(this.effectiveRegistrationKey, false);
         console.log(`[FunctionPanelUIBase] ✅ 已通过 PanelSingletonManager 更新面板 ${this.effectiveRegistrationKey} 可见性为 false`);
 
         // ⭐ 更新面板可见性（通过 inject 的 setPanelVisible 方法）
