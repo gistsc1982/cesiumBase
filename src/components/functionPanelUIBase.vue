@@ -309,6 +309,13 @@ export default {
           const oldIsClosed = this.isClosed;
           this.isClosed = panel.isClosed;
           console.log(`[FunctionPanelUIBase] 🔓 从 PanelSingletonManager 同步面板状态: ${panelName}, isClosed: ${oldIsClosed} -> ${this.isClosed}`);
+          
+          // ⭐ 如果面板应该显示但 isClosed 仍为 true，强制更新
+          if (panel.visible && this.isClosed) {
+            console.log(`[FunctionPanelUIBase] ⚠️ 发现状态不一致: visible=${panel.visible} 但 isClosed=${this.isClosed}，强制修正`);
+            this.isClosed = false;
+            console.log(`[FunctionPanelUIBase] ✅ 强制修正 isClosed: true -> false`);
+          }
         }
       } else {
         // ⭐ 面板首次创建，使用 visible prop 的反值作为 isClosed
@@ -541,6 +548,7 @@ export default {
           console.log(`[FunctionPanelUIBase] ⚠️ 管理器不存在，使用实例配置: ${actualVisible}`);
         }
 
+        // ⭐ 单例面板不传递组件实例，只传递 props 和 visible
         this.registerPanelComponent(this.effectiveRegistrationKey, {
           props: mergedProps,
           visible: actualVisible
@@ -588,8 +596,9 @@ export default {
 
     /**
      * 初始化面板位置
+     * @param {number} retryCount - 重试次数（内部使用，防止无限循环）
      */
-    initPosition() {
+    initPosition(retryCount = 0) {
       // ⭐ 调试：检查面板状态和 panelRef
       const panelRef = this.$refs.panelRef;
       const hasPanelRef = !!panelRef;
@@ -605,7 +614,8 @@ export default {
         isClosed: isClosedValue,
         windowInnerWidth: window.innerWidth,
         windowInnerHeight: window.innerHeight,
-        panelWidth: this.width
+        panelWidth: this.width,
+        retryCount: retryCount
       });
 
       // ⭐ 如果面板已关闭，不需要初始化位置（元素不存在）
@@ -616,11 +626,17 @@ export default {
       }
 
       // ⭐ 如果 panelRef 还不存在但面板应该打开，延迟执行
+      // ⭐ 添加最大重试次数限制，防止无限循环
       if (!hasPanelRef) {
-        console.warn(`[FunctionPanelUIBase] ⚠️ panelRef 还不存在，延迟初始化位置`);
-        this.$nextTick(() => {
-          this.initPosition();
-        });
+        // 最大重试10次（约1秒）
+        if (retryCount >= 10) {
+          console.error(`[FunctionPanelUIBase] ❌ panelRef 初始化超时，放弃初始化位置: ${this.effectiveRegistrationKey}`);
+          return;
+        }
+        console.warn(`[FunctionPanelUIBase] ⚠️ panelRef 还不存在，延迟初始化位置（重试 ${retryCount + 1}/10）`);
+        setTimeout(() => {
+          this.initPosition(retryCount + 1);
+        }, 100);
         return;
       }
 

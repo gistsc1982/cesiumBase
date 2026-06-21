@@ -1600,27 +1600,7 @@ export default {
       // ⭐ 多实例模式：每次点击都创建新实例
       if (!singleton && visible) {
         console.log(`[CesiumMain] 🧬 多实例模式：创建新面板实例 - ${panelId}`);
-
-        // ⭐ 在创建多实例之前，先隐藏对应的单例面板（如果存在）
-        const panelConfig = getPanelConfig(panelId);
-        if (panelConfig?.singletonContainerId) {
-          const singletonPanelName = this.findSingletonPanelByContainerId(panelConfig.singletonContainerId);
-          console.log(`[CesiumMain] 🔍 查找单例面板: ${singletonPanelName}`);
-
-          if (singletonPanelName) {
-            // 更新 PanelSingletonManager 中的状态
-            panelSingletonManager.updatePanelVisible(singletonPanelName, false);
-            console.log(`[CesiumMain] 🔄 已隐藏单例面板: ${singletonPanelName}`);
-
-            // ⭐ 使用 CSS 类来隐藏容器（更可靠，防止 Vue 响应式系统覆盖）
-            const singletonContainer = document.getElementById(panelConfig.singletonContainerId);
-            if (singletonContainer) {
-              singletonContainer.classList.add('hidden');
-              console.log(`[CesiumMain] 🙈 已添加 hidden 类到单例容器: ${panelConfig.singletonContainerId}`);
-            }
-          }
-        }
-
+        // ⭐ 不再隐藏单例面板，让多实例和单例各自管理
         this.createMultiInstancePanel(panelId);
         return;
       }
@@ -3008,6 +2988,8 @@ export default {
       // 设置全局对象
       if (typeof window !== 'undefined') {
         window.__cesiumViewer__ = this.cesiumViewer;
+        window.__panelSingletonManager__ = panelSingletonManager; // ⭐ 暴露到全局供 FunctionPanelUIBase 使用
+        window.__multiInstancePanelConfigManager__ = multiInstancePanelConfigManager;
 
         // ⭐ 触发 Viewer 就绪事件
         const viewerReadyEvent = new CustomEvent('cesium-viewer-ready', {

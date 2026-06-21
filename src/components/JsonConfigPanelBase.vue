@@ -407,6 +407,10 @@ export default {
       type: Number,
       default: null
     },
+    registrationKey: {
+      type: String,
+      default: null
+    },
 
     // 字段定义
     fieldDefinitions: {
