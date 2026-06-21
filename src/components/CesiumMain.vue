@@ -2988,8 +2988,13 @@ export default {
       // 设置全局对象
       if (typeof window !== 'undefined') {
         window.__cesiumViewer__ = this.cesiumViewer;
-        window.__panelSingletonManager__ = panelSingletonManager; // ⭐ 暴露到全局供 FunctionPanelUIBase 使用
-        window.__multiInstancePanelConfigManager__ = multiInstancePanelConfigManager;
+        // ⭐ 工具类实例已在模块导入时自动注册到全局，这里只做确认（不覆盖已有实例）
+        if (!window.__panelSingletonManager__) {
+          window.__panelSingletonManager__ = panelSingletonManager;
+        }
+        if (!window.__multiInstancePanelConfigManager__) {
+          window.__multiInstancePanelConfigManager__ = multiInstancePanelConfigManager;
+        }
 
         // ⭐ 触发 Viewer 就绪事件
         const viewerReadyEvent = new CustomEvent('cesium-viewer-ready', {

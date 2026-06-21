@@ -618,6 +618,13 @@ class MultiInstancePanelConfigManager {
   }
 }
 
-// 导出全局单例
-export const multiInstancePanelConfigManager = new MultiInstancePanelConfigManager();
+// 导出全局单例（优先使用已存在的全局实例，确保只有一个实例）
+const existingManager = typeof window !== 'undefined' && window.__multiInstancePanelConfigManager__;
+export const multiInstancePanelConfigManager = existingManager || new MultiInstancePanelConfigManager();
+
+// 如果是新创建的实例，注册到全局
+if (!existingManager && typeof window !== 'undefined') {
+  window.__multiInstancePanelConfigManager__ = multiInstancePanelConfigManager;
+}
+
 export default multiInstancePanelConfigManager;
