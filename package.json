@@ -15,7 +15,9 @@
     "build:sfc:all": "cd ../sfcLib && npm run build:sfc && cd ../cesiumBase && npm run copy:sfc && npm run switch:sfc",
     "build:inline:all": "cd ../sfcLib && npm run build:inline && cd ../cesiumBase && npm run copy:inline",
     "build:test-sfc": "vite build --config vite.config.test-sfc.js",
-    "build:test-sfc-all": "node scripts/build-sfc-components.js"
+    "build:test-sfc-all": "node scripts/build-sfc-components.js",
+    "copy:test": "node scripts/copy-to-test.js",
+    "build:test-sfc:deploy": "npm run build:test-sfc-all && npm run copy:test"
   },
   "dependencies": {
     "@popperjs/core": "^2.11.0",

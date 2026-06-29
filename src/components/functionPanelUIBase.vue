@@ -54,7 +54,7 @@
         <!-- 面板内容 -->
         <Transition name="content-slide">
           <div v-show="!isMinimized" class="panel-body" :style="bodyStyles">
-            <slot :is-closed="isClosed" :panel-instance-id="panelInstanceId" :is-singleton="isSingletonByConfig"></slot>
+            <slot :is-closed="isClosed" :panel-instance-id="panelInstanceId" :is-singleton="isSingletonByConfig" :section-visible="sectionVisible" :toggle-section="toggleSection"></slot>
           </div>
         </Transition>
       </div>
@@ -90,7 +90,7 @@ const globalPanelSingletonManager = typeof window !== 'undefined' && window.__pa
 export default {
   name: 'FunctionPanelUIBase',
   mixins: [SfcBase],
-  emits: ['close', 'minimize', 'expand', 'lazy-load', 'register-panel', 'unregister-panel'],
+  emits: ['close', 'minimize', 'expand', 'lazy-load', 'register-panel', 'unregister-panel', 'section-toggle'],
   inject: {
     // 父组件提供的注册方法（可选）
     registerPanelComponent: {
@@ -160,7 +160,10 @@ export default {
     blurAmount: { type: String, default: '8px' }, // 降低默认模糊值
     enableBackdropFilter: { type: Boolean, default: false }, // 是否启用 backdrop-filter（性能敏感）
     // ⭐ 延迟加载配置：是否在面板第一次打开时才加载内容
-    lazyLoad: { type: Boolean, default: false }
+    lazyLoad: { type: Boolean, default: false },
+    // 分区可见性控制
+    headerTools: { type: Array, default: () => [] },
+    sectionToggles: { type: Array, default: () => [] }
   },
   data() {
     return {
@@ -184,7 +187,9 @@ export default {
       boundMouseUp: null,
       // 性能优化：缓存面板尺寸
       cachedPanelWidth: null,
-      cachedPanelHeight: null
+      cachedPanelHeight: null,
+      // 分区可见性状态
+      sectionVisibleState: {}
     };
   },
   computed: {
@@ -244,6 +249,9 @@ export default {
       return {
         transform: `translate(${this.x + this.width / 2 - 40}px, ${this.y}px)`
       };
+    },
+    sectionVisible() {
+      return { ...this.sectionVisibleState };
     }
   },
   watch: {
@@ -290,6 +298,9 @@ export default {
     if (this.autoRegister && this.effectiveRegistrationKey && !this._registryRegistered) {
       this.registerToParent();
     }
+
+    // 初始化分区可见性状态
+    this._initSectionVisible();
 
     // ⭐ 判断是否为多实例面板
     // 只有当 panelInstanceId 明确设置为非 null 的数字时才是多实例
@@ -836,6 +847,43 @@ export default {
     },
 
     /**
+     * 分区可见性切换
+     */
+    toggleSection(key) {
+      if (key in this.sectionVisibleState) {
+        this.sectionVisibleState[key] = !this.sectionVisibleState[key];
+        this.$emit('section-toggle', { key, visible: this.sectionVisibleState[key] });
+      }
+    },
+
+    /**
+     * 获取分区可见性
+     */
+    getSectionVisible(key) {
+      return this.sectionVisibleState[key];
+    },
+
+    /**
+     * 初始化分区可见性状态（从 sectionToggles / headerTools props）
+     */
+    _initSectionVisible() {
+      if (this.sectionToggles && this.sectionToggles.length > 0) {
+        this.sectionToggles.forEach(t => {
+          if (!(t.key in this.sectionVisibleState)) {
+            this.sectionVisibleState[t.key] = t.defaultVisible !== false;
+          }
+        });
+      }
+      if (this.headerTools && this.headerTools.length > 0) {
+        this.headerTools.forEach(t => {
+          if (!(t.key in this.sectionVisibleState)) {
+            this.sectionVisibleState[t.key] = t.defaultVisible !== false;
+          }
+        });
+      }
+    },
+
+    /**
      * 关闭面板
      * ⭐ 根据单例/多实例模式执行不同的关闭逻辑
      * - 单例模式（通过配置加载）：假关闭（隐藏面板，不销毁组件）
@@ -1302,5 +1350,37 @@ export default {
   * {
     transition-duration: 0.01ms !important;
   }
+}
+
+/* ========== Header 工具按钮 ========== */
+.header-tool-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 10px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 6px;
+  color: #b0b0b0;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.2s;
+  flex-shrink: 0;
+  margin-left: auto;
+}
+.header-tool-btn:hover {
+  background: rgba(255, 255, 255, 0.12);
+  color: #e0e0e0;
+  border-color: rgba(255, 255, 255, 0.25);
+}
+.header-tool-btn.active {
+  color: #4CAF50 !important;
+  border-color: rgba(76, 175, 80, 0.5) !important;
+  background: rgba(76, 175, 80, 0.15) !important;
+}
+.header-tool-btn svg {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
 }
 </style>

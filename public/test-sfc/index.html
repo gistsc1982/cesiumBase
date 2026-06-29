@@ -4,12 +4,12 @@
     <meta charset="utf-8">
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <meta name="viewport" content="width=device-width,initial-scale=1.0">
-    <link rel="icon" href="../favicon.ico">
-    <link rel="stylesheet" href="../style.css">
+    <link rel="icon" href="<%= BASE_URL %>favicon.ico">
+    <link rel="stylesheet" href="<%= BASE_URL %>style.css">
     <!-- Cesium 样式表 -->
-    <link rel="stylesheet" href="../Cesium/Widgets/widgets.css">
+    <link rel="stylesheet" href="<%= BASE_URL %>Cesium/Widgets/widgets.css">
     <!-- DualCanvasViewer 样式表 -->
-    <link rel="stylesheet" href="../dual-canvas-viewer.css">
+    <link rel="stylesheet" href="<%= BASE_URL %>dual-canvas-viewer.css">
     <title><%= htmlWebpackPlugin.options.title %></title>
   </head>
   <body>
@@ -23,8 +23,12 @@
       window.global = window.globalThis = window;
     </script>
 
-    <!-- ⭐ ES Module Shims (本地版本，提升加载性能) -->
-    <script async src="../libs/es-module-shims.js"></script>
+    <!-- ⭐ 关键脚本预加载 -->
+    <link rel="preload" href="<%= BASE_URL %>libs/vue.global.js" as="script">
+    <link rel="preload" href="<%= BASE_URL %>libs/vue3-sfc-loader.js" as="script">
+
+    <!-- ⭐ ES Module Shims (延迟加载) -->
+    <script defer src="<%= BASE_URL %>libs/es-module-shims.js"></script>
 
     <!-- Cesium 核心库由 webpack 编译提供 (统一版本 1.108，避免版本冲突) -->
     <!-- 注意：旧版 cesiumTdt.js 不兼容 Cesium 1.108，已移除依赖 -->
@@ -34,42 +38,40 @@
     <script type="importmap">
     {
       "imports": {
-        "vue": "../libs/vue.esm-browser.js",
-        "three": "../libs/three.module.js",
-        "three/addons/": "../libs/three/addons/",
-        "xeokit-sdk": "../libs/xeokit-sdk.min.es.js",
-        "web-ifc": "../libs/web-ifc-api.js"
+        "vue": "./libs/vue.esm-browser.js",
+        "three": "./libs/three.module.js",
+        "three/addons/": "./libs/three/addons/",
+        "xeokit-sdk": "./libs/xeokit-sdk.min.es.js",
+        "web-ifc": "./libs/web-ifc-api.js"
       }
     }
     </script>
 
+    <!-- ⭐ 非关键脚本延迟加载 -->
     <!-- xeokit SDK 包装脚本 (作为模块加载) -->
-    <script src="../load-xeokit.js" type="module"></script>
+    <script defer src="<%= BASE_URL %>load-xeokit.js" type="module"></script>
 
-    <!-- ⭐ Three.js 全局加载脚本 -->
-    <script src="../load-three-globals.js" type="module"></script>
+    <!-- Three.js 全局加载脚本 -->
+    <script defer src="<%= BASE_URL %>load-three-globals.js" type="module"></script>
 
-    <!-- SyncManager 全局暴露 (必须在插件之前加载) -->
-    <script src="../sync-manager-global.js"></script>
+    <!-- SyncManager 全局暴露 (延迟加载) -->
+    <script defer src="<%= BASE_URL %>sync-manager-global.js"></script>
 
-    <!-- ⭐ vue3-sfc-loader (使用本地版本，提升加载性能) -->
-    <script src="../libs/vue3-sfc-loader.js"></script>
+    <!-- ⭐ Vue 3 和 SFC Loader (关键，同步加载) -->
+    <script src="<%= BASE_URL %>libs/vue3-sfc-loader.js"></script>
+    <script src="<%= BASE_URL %>libs/vue.global.js"></script>
 
-    <!-- ⭐ Vue 3 IIFE 版本 (本地版本，提升加载性能) -->
-    <script src="../libs/vue.global.js"></script>
+    <!-- ⭐ DualCanvasViewer Plugin (同步加载，避免时序问题) -->
+    <!-- <script src="<%= BASE_URL %>dual-canvas-viewer-plugin.iife.js?v=2.6"></script> -->
 
-    <!-- ⭐ 工具模块全局加载脚本 -->
-    <!-- 已禁用 - 工具模块现在从 dual-canvas-viewer-plugin.iife.js 中获取 -->
-    <!-- <script src="../load-utility-modules.js?v=2.4" type="module"></script> -->
+    <!-- SyncManager 桥接脚本 (延迟加载) -->
+    <script defer src="<%= BASE_URL %>sync-manager-bridge.js"></script>
 
-    <!-- ⭐ DualCanvasViewer Plugin IIFE 版本 (用于 IIFE 加载模式) -->
-    <script src="../dual-canvas-viewer-plugin.iife.js?v=2.4"></script>
+    <!-- Cesium 与 Dual 组件双向同步脚本 V2 -->
+    <script defer src="<%= BASE_URL %>cesium-dual-sync-v2.js"></script>
 
-    <!-- SyncManager 桥接脚本 (必须在插件之后加载) -->
-    <script src="../sync-manager-bridge.js"></script>
-
-    <!-- Cesium 与 Dual 组件双向同步脚本 V2 (基于 ok-rotation 子项目，支持左键翻转保护) -->
-    <script src="../cesium-dual-sync-v2.js"></script>
+    <!-- ⭐ DualCanvasViewer 容器由 CesiumMain.vue 模板提供，无需静态定义 -->
+    <div id="dualCanvasContainer" class="dual-canvas-overlay" style="display: none;"></div>
 
     <div id="app"></div>
     <!-- built files will be auto injected -->

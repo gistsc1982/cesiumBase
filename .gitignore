@@ -45,6 +45,7 @@ public/test-sfc/sfc-plugin/
 # sfcLib 构建产物
 # 忽略所有文件，但保留必需文件（Three.js 现在是 external）
 public/test-sfc/sfcLib/
+public/test-sfc/
 
 # 但保留以下必需文件（Three.js 现在打包进组件）
 !public/test-sfc/sfcLib/dist/

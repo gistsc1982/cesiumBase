@@ -1,5 +1,6 @@
 import { Fragment as e, createCommentVNode as t, createElementBlock as n, createElementVNode as r, normalizeClass as i, normalizeStyle as a, openBlock as o, toDisplayString as s, vModelText as c, withDirectives as l } from "vue";
-var u = new class {
+//#region src/utils/CesiumEventManager.js
+var u = class {
 	constructor() {
 		this.isReady = !1, this.listeners = /* @__PURE__ */ new Set(), this.cesiumInstance = null, this.viewerInstance = null, this.checkInterval = null, this.checkAttempts = 0, this.maxAttempts = 50;
 	}
@@ -91,26 +92,29 @@ var u = new class {
 	destroy() {
 		this.stopPolling(), this.removeGlobalListener(), this.listeners.clear(), this.isReady = !1, this.cesiumInstance = null, this.viewerInstance = null;
 	}
-}();
-typeof window < "u" && (document.readyState === "loading" ? document.addEventListener("DOMContentLoaded", () => {
-	u.init();
-}) : u.init(), window.__cesiumEventManager__ = u);
+}, d = typeof window < "u" && window.__cesiumEventManager__, f = d || new u();
+!d && typeof window < "u" && (window.__cesiumEventManager__ = f, document.readyState === "loading" ? document.addEventListener("DOMContentLoaded", () => {
+	f.init();
+}) : f.init());
 //#endregion
 //#region \0plugin-vue:export-helper
-var d = (e, t) => {
+var p = (e, t) => {
 	let n = e.__vccOpts || e;
 	for (let [e, r] of t) n[e] = r;
 	return n;
-}, f = {
+}, m = {
 	name: "SfcBase",
-	props: { onClose: {
-		type: Function,
-		default: null
-	} },
-	inject: {
-		closeEventName: { default: "sfcBaseClose" },
-		instanceId: { default: 1 }
+	props: {
+		onClose: {
+			type: Function,
+			default: null
+		},
+		panelInstanceId: {
+			type: Number,
+			default: null
+		}
 	},
+	inject: { instanceId: { default: 1 } },
 	data() {
 		return {
 			cesiumReady: !1,
@@ -118,6 +122,17 @@ var d = (e, t) => {
 			boundEventHandlers: {},
 			cesiumUnsubscribe: null
 		};
+	},
+	computed: {
+		isSingleton() {
+			return this.panelInstanceId === null || this.panelInstanceId === void 0;
+		},
+		isMultiInstance() {
+			return !this.isSingleton;
+		},
+		panelInstanceKey() {
+			return this.isSingleton ? this.effectiveRegistrationKey || this.componentName : `${this.effectiveRegistrationKey || this.componentName}_${this.panelInstanceId}`;
+		}
 	},
 	methods: {
 		checkCesiumReady() {
@@ -131,7 +146,7 @@ var d = (e, t) => {
 			let n = null;
 			t > 0 && (n = setTimeout(() => {
 				this.cesiumUnsubscribe &&= (this.cesiumUnsubscribe(), null), this.$logger?.warn?.(`[${this.componentName}] Cesium 初始化超时 (${t}ms)`);
-			}, t)), this.cesiumUnsubscribe = u.onReady((t, r) => {
+			}, t)), this.cesiumUnsubscribe = f.onReady((t, r) => {
 				n &&= (clearTimeout(n), null), this.cesiumReady = !0, this.$logger?.info?.(`[${this.componentName}] Cesium 已就绪（事件驱动）`), e && typeof e == "function" && e(t, r);
 			});
 		},
@@ -247,18 +262,18 @@ var d = (e, t) => {
 	beforeUnmount() {
 		this.cleanup();
 	}
-}, p = {
+}, h = {
 	class: "sfc-base",
 	style: { display: "none" }
 };
-function m(i, a, s, c, l, u) {
-	return o(), n(e, null, [t(" 基础组件无界面元素，仅作为逻辑基类 "), r("div", p)], 2112);
+function g(i, a, s, c, l, u) {
+	return o(), n(e, null, [t(" 基础组件无界面元素，仅作为逻辑基类 "), r("div", h)], 2112);
 }
 //#endregion
 //#region src/components/TestSfc.vue
-var h = {
+var _ = {
 	name: "TestSfc",
-	mixins: [/* @__PURE__ */ d(f, [["render", m]])],
+	mixins: [/* @__PURE__ */ p(m, [["render", g]])],
 	props: { onClose: {
 		type: Function,
 		default: null
@@ -376,8 +391,8 @@ var h = {
 	beforeUnmount() {
 		this.isDragging && (this.boundOnDrag && document.removeEventListener("mousemove", this.boundOnDrag), this.boundStopDrag && document.removeEventListener("mouseup", this.boundStopDrag)), this.cleanup();
 	}
-}, g = { class: "test-sfc-body" }, _ = { class: "location-form" }, v = { class: "form-group" }, y = { class: "form-group" }, b = { class: "form-group" }, x = { class: "form-group" };
-function S(e, u, d, f, p, m) {
+}, v = { class: "test-sfc-body" }, y = { class: "location-form" }, b = { class: "form-group" }, x = { class: "form-group" }, S = { class: "form-group" }, C = { class: "form-group" };
+function w(e, u, d, f, p, m) {
 	return o(), n("div", {
 		class: i(["test-sfc-modal", { "is-dragging": p.isDragging }]),
 		style: a({
@@ -392,8 +407,8 @@ function S(e, u, d, f, p, m) {
 	}, [u[7] ||= r("h3", null, "🧪 TestSfc 测试组件", -1), r("button", {
 		onClick: u[0] ||= (...e) => m.handleClose && m.handleClose(...e),
 		class: "close-btn"
-	}, "×")], 34), r("div", g, [r("div", _, [
-		r("div", v, [u[8] ||= r("label", { class: "form-label" }, [r("span", { class: "label-icon" }, "📍"), r("span", null, "经度")], -1), l(r("input", {
+	}, "×")], 34), r("div", v, [r("div", y, [
+		r("div", b, [u[8] ||= r("label", { class: "form-label" }, [r("span", { class: "label-icon" }, "📍"), r("span", null, "经度")], -1), l(r("input", {
 			"onUpdate:modelValue": u[2] ||= (e) => p.longitude = e,
 			type: "number",
 			step: "0.000001",
@@ -407,7 +422,7 @@ function S(e, u, d, f, p, m) {
 			void 0,
 			{ number: !0 }
 		]])]),
-		r("div", y, [u[9] ||= r("label", { class: "form-label" }, [r("span", { class: "label-icon" }, "🌐"), r("span", null, "纬度")], -1), l(r("input", {
+		r("div", x, [u[9] ||= r("label", { class: "form-label" }, [r("span", { class: "label-icon" }, "🌐"), r("span", null, "纬度")], -1), l(r("input", {
 			"onUpdate:modelValue": u[3] ||= (e) => p.latitude = e,
 			type: "number",
 			step: "0.000001",
@@ -421,7 +436,7 @@ function S(e, u, d, f, p, m) {
 			void 0,
 			{ number: !0 }
 		]])]),
-		r("div", b, [u[10] ||= r("label", { class: "form-label" }, [r("span", { class: "label-icon" }, "🔭"), r("span", null, "高度")], -1), l(r("input", {
+		r("div", S, [u[10] ||= r("label", { class: "form-label" }, [r("span", { class: "label-icon" }, "🔭"), r("span", null, "高度")], -1), l(r("input", {
 			"onUpdate:modelValue": u[4] ||= (e) => p.height = e,
 			type: "number",
 			step: "0.1",
@@ -433,7 +448,7 @@ function S(e, u, d, f, p, m) {
 			void 0,
 			{ number: !0 }
 		]])]),
-		r("div", x, [u[11] ||= r("label", { class: "form-label" }, [r("span", { class: "label-icon" }, "⤵"), r("span", null, "俯仰角")], -1), l(r("input", {
+		r("div", C, [u[11] ||= r("label", { class: "form-label" }, [r("span", { class: "label-icon" }, "⤵"), r("span", null, "俯仰角")], -1), l(r("input", {
 			"onUpdate:modelValue": u[5] ||= (e) => p.pitch = e,
 			type: "number",
 			step: "0.1",
@@ -457,6 +472,6 @@ function S(e, u, d, f, p, m) {
 		}, s(p.locateMessage), 3)) : t("v-if", !0)
 	])])], 6);
 }
-var C = /*#__PURE__*/ d(h, [["render", S]]);
+var T = /*#__PURE__*/ p(_, [["render", w]]);
 //#endregion
-export { C as default };
+export { T as default };

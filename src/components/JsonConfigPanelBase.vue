@@ -18,7 +18,28 @@
     @minimize="handleMinimize"
     @expand="handleExpand"
     @lazy-load="onLazyLoad"
+    :section-toggles="sectionToggles"
+    :header-tools="headerTools"
+    @section-toggle="onSectionToggle"
   >
+    <!-- 转发 header 插槽 -->
+    <template #header>
+      <slot name="header">
+        <h3 class="panel-title">{{ panelTitle }}</h3>
+        <button
+          v-for="tool in headerTools"
+          :key="tool.key"
+          @click.stop="toggleSection(tool.key)"
+          class="header-tool-btn"
+          :class="{ active: localSectionVisible[tool.key] }"
+          :title="tool.title || tool.label"
+          type="button"
+        >
+          <span v-if="tool.icon" v-html="tool.icon"></span>
+          <span>{{ tool.label }}</span>
+        </button>
+      </slot>
+    </template>
     <!-- 工具栏 -->
     <div class="toolbar">
       <!-- 添加按钮 -->
@@ -72,6 +93,20 @@
           <path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15" stroke-linecap="round" stroke-linejoin="round"/>
         </svg>
         刷新
+      </button>
+
+      <!-- 分区切换按钮 -->
+      <button
+        v-for="toggle in sectionToggles"
+        :key="'st-' + toggle.key"
+        @click="toggleSection(toggle.key)"
+        class="section-toggle-btn"
+        :class="{ active: localSectionVisible[toggle.key] }"
+        :title="toggle.title || toggle.label"
+        type="button"
+      >
+        <span v-if="toggle.icon" v-html="toggle.icon"></span>
+        <span>{{ toggle.label }}</span>
       </button>
 
       <!-- 子类扩展：工具栏额外按钮 -->
@@ -450,12 +485,21 @@ export default {
     lazyLoad: {
       type: Boolean,
       default: false
+    },
+    sectionToggles: {
+      type: Array,
+      default: () => []
+    },
+    headerTools: {
+      type: Array,
+      default: () => []
     }
   },
 
   data() {
     return {
       configList: [],
+      localSectionVisible: {},
 
       // 对话框状态
       showAddDialog: false,
@@ -497,6 +541,18 @@ export default {
       frontend: this.serverBaseURL,
       api: this.apiServerURL
     });
+
+    // 初始化分区可见性状态
+    if (this.sectionToggles) {
+      this.sectionToggles.forEach(t => {
+        this.localSectionVisible[t.key] = t.defaultVisible !== false;
+      });
+    }
+    if (this.headerTools) {
+      this.headerTools.forEach(t => {
+        this.localSectionVisible[t.key] = t.defaultVisible !== false;
+      });
+    }
   },
 
   mounted() {
@@ -571,6 +627,13 @@ export default {
       } else {
         console.log(`[${this.effectivePanelName}] Cesium 已就绪，等待延迟加载触发`);
       }
+    });
+
+    // 应用初始分区可见性
+    this.$nextTick(() => {
+      this.$nextTick(() => {
+        this.applySectionVisibility();
+      });
     });
   },
 
@@ -943,6 +1006,19 @@ export default {
         this.configList = this.processLoadedData(data);
 
         console.log(`[${this.panelName}] 📦 共加载 ${this.configList.length} 条`);
+
+        // ⭐ 加载成功后保存到缓存，避免关闭面板后数据丢失
+        const cacheKey = this.panelInstanceId !== null
+          ? `${this.effectiveRegistrationKey}_${this.panelInstanceId}`
+          : this.effectiveRegistrationKey;
+        globalPanelSingletonManager.savePanelState(cacheKey, {
+          configList: this.configList.map(item => ({
+            id: item.id, name: item.name, url: item.url,
+            loaded: false, loading: false
+          })),
+          timestamp: Date.now()
+        });
+
         this.onConfigLoaded();
       } catch (error) {
         console.error(`[${this.panelName}] ❌ 加载失败:`, error);
@@ -957,30 +1033,8 @@ export default {
     async refreshConfig(forceRefresh = true) {
       if (forceRefresh) {
         console.log(`[${this.panelName}] 🔄 强制刷新配置 (绕过缓存)`);
-        // 清除本地缓存
+        // 只清除本地列表，不清空缓存（loadConfig 成功后会自动保存新数据到缓存）
         this.configList = [];
-
-        // 根据模式清除对应的缓存
-        const isMultiInstance = this.panelInstanceId !== null;
-        if (isMultiInstance) {
-          // 多实例模式：清除 MultiInstancePanelConfigManager 中的缓存
-          if (typeof window !== 'undefined' && window.__multiInstancePanelConfigManager__ && typeof window.__multiInstancePanelConfigManager__.clearPanelInstanceCache === 'function') {
-            window.__multiInstancePanelConfigManager__.clearPanelInstanceCache(
-              this.instanceId || 1,
-              this.effectiveRegistrationKey,
-              this.panelInstanceId
-            );
-            console.log(`[${this.panelName}] 🗑️ 多实例缓存已清除 (#${this.panelInstanceId})`);
-          }
-        } else {
-          // 单例模式：清除 PanelSingletonManager 中的缓存
-          globalPanelSingletonManager.savePanelState(this.effectiveRegistrationKey, {
-            cesiumObjects: { cesiumTilesets: new Map(), cesiumTransforms: new Map(), cesiumHeightOffsets: new Map() },
-            configList: [],
-            timestamp: 0
-          });
-          console.log(`[${this.panelName}] 🗑️ 单例缓存已清除`);
-        }
       } else {
         console.log(`[${this.panelName}] 🔄 正常刷新配置`);
       }
@@ -1400,6 +1454,47 @@ export default {
 
     handleExpand() {
       console.log(`[${this.panelName}] 面板展开`);
+    },
+
+    /**
+     * 对外 API：切换分区可见性（子组件可通过 $refs.basePanel.toggleSection(key) 调用）
+     */
+    toggleSection(key) {
+      this.localSectionVisible = { ...this.localSectionVisible, [key]: !this.localSectionVisible[key] };
+      this.$emit('section-toggle', { key, visible: this.localSectionVisible[key] });
+      this.$nextTick(() => this.applySectionVisibility());
+    },
+
+    /**
+     * 对外 API：获取分区可见性
+     */
+    getSectionVisible(key) {
+      return this.localSectionVisible[key];
+    },
+
+    /**
+     * 接收 FunctionPanelUIBase 的分区切换事件
+     */
+    onSectionToggle(e) {
+      this.localSectionVisible = { ...this.localSectionVisible, [e.key]: e.visible };
+      this.$emit('section-toggle', e);
+      this.$nextTick(() => this.applySectionVisibility());
+    },
+
+    /**
+     * DOM 自动隐藏/显示
+     */
+    applySectionVisibility() {
+      // 从 $el 向上找到容器，再从中查找 .function-panel
+      let el = this.$el;
+      while (el && el.nodeType !== 1) el = el.parentElement; // 跳过 Text/Comment 节点
+      const panel = el ? (el.closest('.function-panel') || el.querySelector('.function-panel')) : document.querySelector('.function-panel');
+      if (!panel) return;
+      const sv = this.localSectionVisible;
+      const toolbar = panel.querySelector('.toolbar');
+      if (toolbar && 'showToolbar' in sv) toolbar.style.display = sv.showToolbar !== false ? '' : 'none';
+      const configList = panel.querySelector('.config-list');
+      if (configList && 'list' in sv) configList.style.display = sv.list ? '' : 'none';
     }
   }
 };
@@ -1925,5 +2020,66 @@ export default {
 .config-list::-webkit-scrollbar-thumb:hover,
 .dialog-body::-webkit-scrollbar-thumb:hover {
   background: rgba(255, 255, 255, 0.3);
+}
+
+/* ========== 分区切换按钮 ========== */
+.section-toggle-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 10px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 6px;
+  color: #b0b0b0;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.section-toggle-btn:hover {
+  background: rgba(255, 255, 255, 0.14);
+  color: #e0e0e0;
+  border-color: rgba(255, 255, 255, 0.28);
+}
+.section-toggle-btn.active {
+  color: #4CAF50 !important;
+  border-color: rgba(76, 175, 80, 0.5) !important;
+  background: rgba(76, 175, 80, 0.15) !important;
+}
+.section-toggle-btn svg {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+}
+/* Header 工具按钮 */
+.header-tool-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 10px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 6px;
+  color: #b0b0b0;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.2s;
+  flex-shrink: 0;
+  margin-left: auto;
+}
+.header-tool-btn:hover {
+  background: rgba(255, 255, 255, 0.12);
+  color: #e0e0e0;
+  border-color: rgba(255, 255, 255, 0.25);
+}
+.header-tool-btn.active {
+  color: #4CAF50 !important;
+  border-color: rgba(76, 175, 80, 0.5) !important;
+  background: rgba(76, 175, 80, 0.15) !important;
+}
+.header-tool-btn svg {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
 }
 </style>

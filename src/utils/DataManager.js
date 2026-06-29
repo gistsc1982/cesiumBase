@@ -65,6 +65,22 @@ class DataManager {
       timeout: 30000
     };
 
+    // ⭐ 从 window.__pendingConfigDefinitions__ 中加载待注册的配置
+    // ConfigRegistry 在 DataManager 就绪前注册的配置会暂存在这里
+    if (typeof window !== 'undefined' && window.__pendingConfigDefinitions__) {
+      window.__pendingConfigDefinitions__.forEach((def, id) => {
+        if (!this.configDefinitions.has(id)) {
+          this.configDefinitions.set(id, def);
+          console.log(`[DataManager] ✅ 加载待注册配置: ${id}`);
+        }
+      });
+    }
+
+    // ⭐ 将自身暴露到 window，供 ConfigRegistry 等使用
+    if (typeof window !== 'undefined') {
+      window.__dataManager__ = this;
+    }
+
     console.log('[DataManager] 初始化完成');
     console.log('[DataManager] 服务器配置:', this.serverConfig);
   }

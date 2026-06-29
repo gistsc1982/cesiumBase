@@ -70,14 +70,18 @@ function checkExtendsSfcBase(filePath) {
                                    /FunctionPanelUIBase.*mixins:.*SfcBase/s.test(content) ||
                                    /mixins:\s*\[[\s*\{[^}]*FunctionPanelUIBase/.test(content);
 
+    // 检查是否使用 JsonConfigPanelBase（间接继承 FunctionPanelUIBase → SfcBase）
+    const hasJsonConfigPanelBase = /import\s+JsonConfigPanelBase/.test(content);
+
     // 检查是否使用其他可能继承 SfcBase 的基础组件
-    const hasOtherBaseComponent = /import.*from.*\/(SfcBase|CesiumBase|functionPanelUIBase)\.vue/.test(content);
+    const hasOtherBaseComponent = /import.*from.*\/(SfcBase|CesiumBase|functionPanelUIBase|JsonConfigPanelBase)\.vue/.test(content);
 
     // 支持直接继承和间接继承：
     // 1. 直接继承：导入 SfcBase 并通过 extends/mixins 使用
-    // 2. 间接继承：使用 FunctionPanelUIBase 或其他中间基类
+    // 2. 间接继承：使用 FunctionPanelUIBase / JsonConfigPanelBase 或其他中间基类
     return (hasSfcBaseImport && (hasExtendsSfcBase || hasSfcBaseMixin)) ||
            hasFunctionPanelUIBase ||
+           hasJsonConfigPanelBase ||
            (hasOtherBaseComponent && !hasSfcBaseImport);
   } catch (error) {
     log(`   ⚠️ 无法读取文件 ${filePath}: ${error.message}`, 'yellow');
@@ -202,6 +206,18 @@ async function buildComponent(component) {
       // 禁用某些优化以提高构建速度
       minify: false
     });
+
+    // 保存 CSS 为 .mjs.css（匹配组件 scope ID）
+    const cssFile = path.join(path.resolve(CONFIG.rootDir, CONFIG.outDir), 'cesiumBase.css');
+    if (fs.existsSync(cssFile)) {
+      const cssDest = path.join(path.resolve(CONFIG.rootDir, CONFIG.outDir), `${component.name}.mjs.css`);
+      fs.copyFileSync(cssFile, cssDest);
+      // 同步更新 cesiumBase/src/components/ 下的备份 CSS（保持 scope ID 一致）
+      const backupDir = path.resolve(CONFIG.rootDir, CONFIG.srcDir);
+      const backupDest = path.join(backupDir, `${component.name}.mjs.css`);
+      fs.copyFileSync(cssFile, backupDest);
+      log(`   🎨 CSS: ${component.name}.mjs.css (含 cesiumBase 备份)`, 'cyan');
+    }
 
     const duration = ((Date.now() - startTime) / 1000).toFixed(2);
     log(`   ✅ ${component.name} 构建成功 (${duration}s)`, 'green');

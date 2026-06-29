@@ -15,8 +15,17 @@
     :field-definitions="fieldDefinitions"
     :default-form-values="defaultFormValues"
     :toolbar-buttons="toolbarButtons"
+    :header-tools="[{ key: 'showToolbar', label: '工具', defaultVisible: true }]"
+    :lazy-load="true"
     @config-loaded="onConfigLoadedHandler"
   >
+    <template #header>
+      <h3 class="panel-title">倾斜摄影加载（继承示例）</h3>
+      <button @click.stop="headerToolClick()" class="header-tool-btn" title="显示/隐藏工具栏" type="button">
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><rect x="1" y="1.5" width="12" height="3" rx="1" stroke="currentColor" stroke-width="1.5" fill="none"/><line x1="2.5" y1="6.5" x2="11.5" y2="6.5" stroke="currentColor" stroke-width="1.2"/><line x1="2.5" y1="9" x2="8.5" y2="9" stroke="currentColor" stroke-width="1.2"/></svg>
+        工具
+      </button>
+    </template>
     <!-- 工具栏额外按钮（定位、高度调整等） -->
     <template #toolbar-extra>
       <button
@@ -210,6 +219,22 @@ export default {
   },
 
   methods: {
+    headerToolClick() {
+      // 从文档中查找当前可见的 .function-panel
+      var panels = document.querySelectorAll('.function-panel');
+      for (var i = 0; i < panels.length; i++) {
+        var p = panels[i];
+        if (p.offsetParent !== null || p.style.display !== 'none') {
+          var toolbar = p.querySelector('.toolbar');
+          if (toolbar) {
+            var cur = toolbar.style.display;
+            toolbar.style.display = (cur === 'none') ? '' : 'none';
+            break;
+          }
+        }
+      }
+    },
+
     // ==================== 基类钩子方法覆盖 ====================
 
     /**
@@ -620,6 +645,17 @@ export default {
 </script>
 
 <style scoped>
+/* Header "工具"按钮 */
+.header-tool-btn {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 5px 10px; background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.15); border-radius: 6px;
+  color: #b0b0b0; font-size: 12px; cursor: pointer;
+  transition: all 0.2s; flex-shrink: 0; margin-left: auto;
+}
+.header-tool-btn:hover { background: rgba(255,255,255,0.12); color: #e0e0e0; }
+.header-tool-btn svg { width: 14px; height: 14px; flex-shrink: 0; }
+
 /* ==================== 倾斜摄影复选框样式 ==================== */
 .oblique-checkbox {
   display: flex;
