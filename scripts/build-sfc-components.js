@@ -195,16 +195,16 @@ async function buildComponent(component) {
         },
         // 排除不需要的资源
         copyPublicDir: false,
-        // 不生成 source map（减少文件数量）
-        sourcemap: false
+        // 不生成 source map
+        sourcemap: false,
+        // 压缩/混淆代码
+        minify: 'terser'
       },
       resolve: {
         alias: {
           'vue': path.resolve(CONFIG.rootDir, 'node_modules/vue')
         }
-      },
-      // 禁用某些优化以提高构建速度
-      minify: false
+      }
     });
 
     // 保存 CSS 为 .mjs.css（匹配组件 scope ID）
