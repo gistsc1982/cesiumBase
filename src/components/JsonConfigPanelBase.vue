@@ -1485,10 +1485,13 @@ export default {
      * DOM 自动隐藏/显示
      */
     applySectionVisibility() {
-      // 从 $el 向上找到容器，再从中查找 .function-panel
-      let el = this.$el;
-      while (el && el.nodeType !== 1) el = el.parentElement; // 跳过 Text/Comment 节点
-      const panel = el ? (el.closest('.function-panel') || el.querySelector('.function-panel')) : document.querySelector('.function-panel');
+      // 从 document 中查找可见的 .function-panel（避免 Teleport 环境 $el 不可用）
+      let panel = null;
+      const panels = document.querySelectorAll('.function-panel');
+      for (let i = 0; i < panels.length; i++) {
+        const p = panels[i];
+        if (p.offsetParent !== null || p.style.display !== 'none') { panel = p; break; }
+      }
       if (!panel) return;
       const sv = this.localSectionVisible;
       const toolbar = panel.querySelector('.toolbar');
