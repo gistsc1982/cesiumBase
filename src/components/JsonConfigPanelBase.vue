@@ -529,6 +529,9 @@ export default {
   },
 
   created() {
+    // ⭐ 生成唯一面板标识，用于 applySectionVisibility 定位自身 DOM
+    this._panelUid = 'jcp_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 8);
+
     // 从环境变量读取服务器配置
     this.serverBaseURL = process.env.VUE_APP_SERVER_BASE_URL || 'http://192.168.31.146:8080';
 
@@ -556,6 +559,27 @@ export default {
   },
 
   mounted() {
+    // ⭐ 给面板 DOM 打唯一标识（FunctionPanelUIBase 用了 Teleport to body，
+    //    需等 Teleport 完成后再设置属性）
+    var self = this;
+    this.$nextTick(function () {
+      var panelEl = self.$refs.basePanel && self.$refs.basePanel.$el;
+      if (!panelEl || !panelEl.setAttribute) {
+        // Teleport 后 $el 可能仍是 placeholder，退而求其次：在 body 中遍历查找
+        var allPanels = document.querySelectorAll('.function-panel');
+        for (var i = 0; i < allPanels.length; i++) {
+          if (!allPanels[i].hasAttribute('data-panel-uid')) {
+            panelEl = allPanels[i];
+            break;
+          }
+        }
+        console.log('[JsonConfigPanelBase] mounted fallback: setAttribute on first unmarked .function-panel');
+      }
+      if (panelEl && panelEl.setAttribute) {
+        panelEl.setAttribute('data-panel-uid', self._panelUid);
+      }
+    });
+
     const savedState = globalPanelSingletonManager.getPanelState(this.effectivePanelName);
     const hasCesiumObjects = savedState && savedState.cesiumObjects;
 
@@ -1485,12 +1509,18 @@ export default {
      * DOM 自动隐藏/显示
      */
     applySectionVisibility() {
-      // 从 document 中查找可见的 .function-panel（避免 Teleport 环境 $el 不可用）
       let panel = null;
-      const panels = document.querySelectorAll('.function-panel');
-      for (let i = 0; i < panels.length; i++) {
-        const p = panels[i];
-        if (p.offsetParent !== null || p.style.display !== 'none') { panel = p; break; }
+      if (this._panelUid) {
+        panel = document.querySelector('[data-panel-uid="' + this._panelUid + '"]');
+        console.log('[JsonConfigPanelBase] applySectionVisibility: _panelUid=' + this._panelUid +
+          ', found=' + !!panel + ', panelName=' + this.panelName);
+      }
+      if (!panel) {
+        const panels = document.querySelectorAll('.function-panel');
+        for (let i = 0; i < panels.length; i++) {
+          const p = panels[i];
+          if (p.offsetParent !== null || p.style.display !== 'none') { panel = p; break; }
+        }
       }
       if (!panel) return;
       const sv = this.localSectionVisible;
