@@ -1228,6 +1228,7 @@ export default {
   flex: 1;
   overflow-y: auto;
   overflow-x: hidden;
+  overflow-anchor: none;
   /* 优化：使用纯色背景替代渐变 */
   background: rgba(0, 0, 0, 0.25);
 }
