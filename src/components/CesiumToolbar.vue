@@ -256,8 +256,8 @@ export default {
               icon: config.icon || '📄',
               label: config.title || config.name,
               tooltip: config.description || config.title,
-              // ⭐ 只有 .mjs 懒加载面板初始状态为禁用
-              disabled: needsLazyLoad,
+              // ⭐ 懒加载面板不禁用按钮（需可点击触发首次加载）
+              disabled: !config.lazyLoad && needsLazyLoad,
               ariaLabel: config.title || config.name,
               action: 'toggle-panel',
               panelId: config.name,
