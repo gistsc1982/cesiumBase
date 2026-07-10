@@ -385,6 +385,17 @@ async function main() {
     // 默认：自动发现
     componentsToBuild = discoverSfcComponents();
 
+    // ⭐ 手动补充：不继承 SfcBase 但需要作为独立 .mjs 编译的组件
+    const MANUAL_COMPONENTS = [
+      { name: 'CesiumToolbar', entry: 'CesiumToolbar.vue', description: '工具栏组件（独立编译，不继承 SfcBase）' }
+    ];
+    for (const mc of MANUAL_COMPONENTS) {
+      if (!componentsToBuild.find(c => c.name === mc.name)) {
+        componentsToBuild.push(mc);
+        log(`   ➕ 手动添加 ${mc.name}`, 'cyan');
+      }
+    }
+
     if (componentsToBuild.length === 0) {
       log('\n⚠️ 未发现任何继承 SfcBase 的组件', 'yellow');
       log('提示: 使用 --discover 参数或确保组件继承 SfcBase', 'yellow');

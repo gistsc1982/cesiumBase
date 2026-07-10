@@ -17,7 +17,8 @@ const COPY_MAP = {
   'lib': [
     'FunctionPanelUIBase.mjs',
     'JsonConfigPanelBase.mjs',
-    'TestSfc.mjs'
+    'TestSfc.mjs',
+    'CesiumToolbar.mjs'
   ],
   // test/src/components/functions/lib/
   'functions/lib': [
