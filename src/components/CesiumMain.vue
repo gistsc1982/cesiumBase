@@ -492,10 +492,11 @@ async function loadMjsMultiInstance(componentName, panelConfig) {
   const { loadModule } = window['vue3-sfc-loader'];
   const Vue = await import('vue');
 
-  // ⭐ DualCanvasViewer.mjs 内部已打包 Three.js，无需等待全局模块
-
-  // 解析 .mjs 文件路径
+  // ⭐ 解析 .mjs 文件路径
   const componentPath = await resolveMjsResourcePath(panelConfig.file);
+
+  // ⭐ 加载组件对应的样式表（dual-canvas-viewer.mjs 本身不含 CSS）
+  await loadMjsComponentStyle(componentPath);
 
   // 加载组件
   const module = await loadModule(componentPath, getSFCOptions(Vue));
@@ -508,30 +509,82 @@ async function loadMjsMultiInstance(componentName, panelConfig) {
 
 /**
  * 解析 .mjs 资源路径
+ * ⭐ 返回相对路径（不带前导 /），与 publicPath 无关，
+ *    在开发（publicPath=/）与生产（publicPath=./）下都能正确解析。
  * @param {string} fileName - .mjs 文件名或路径
  * @returns {Promise<string>} 完整路径
  */
 async function resolveMjsResourcePath(fileName) {
-  // 如果 fileName 包含路径分隔符，认为是完整路径，直接使用
+  // 如果 fileName 包含路径分隔符，认为是相对 public 目录的路径，直接使用
   if (fileName.includes('/')) {
-    return `/${fileName}`;
+    return `./${fileName}`;
   }
   // 默认从 public/libs 目录加载
-  return `/libs/${fileName}`;
+  return `./libs/${fileName}`;
+}
+
+/**
+ * 加载 .mjs 组件对应的样式表（同名 .css，若存在则跳过）
+ * @param {string} componentPath - .mjs 组件的路径
+ * @returns {Promise<void>}
+ */
+async function loadMjsComponentStyle(componentPath) {
+  const cssHref = componentPath.replace(/\.mjs$/i, '.css');
+  // 已加载过则跳过
+  if (document.querySelector(`link[href="${cssHref}"]`)) {
+    return;
+  }
+  return new Promise((resolve) => {
+    const link = document.createElement('link');
+    link.rel = 'stylesheet';
+    link.href = cssHref;
+    link.onload = () => resolve();
+    link.onerror = () => {
+      console.warn(`[CesiumMain] ⚠️ 组件样式表加载失败: ${cssHref}`);
+      resolve();
+    };
+    document.head.appendChild(link);
+  });
 }
 
 /**
  * 获取 vue3-sfc-loader 配置选项
+ * ⭐ DualCanvasViewer.mjs 是 vite 构建产物，three / three/addons/* 均被 external，
+ *    必须由 moduleCache 提供（importmap 对 vue3-sfc-loader 的解析不生效）。
+ *    这些模块由 load-three-globals.js 提前挂载到 window，二者共享同一份实例，
+ *    避免出现两份 three 导致 camera 同步（instanceof / 矩阵约定）失效。
  * @param {Object} Vue - Vue 对象
  * @returns {Object} SFC 配置选项
  */
 function getSFCOptions(Vue) {
+  const w = typeof window !== 'undefined' ? window : {};
+  if (!w.THREE) {
+    console.warn('[CesiumMain] ⚠️ window.THREE 尚未就绪，three 相关模块可能无法解析');
+  }
+
+  // 构造命名导出 + default 兼容两种导入写法的模块对象
+  const addonModule = (name) => {
+    const val = w[name] || {};
+    return Object.assign({ default: val }, { [name]: val });
+  };
+
   return {
     moduleCache: {
-      vue: Vue
+      vue: Vue,
+      'three': w.THREE || {},
+      'three/addons/controls/OrbitControls.js': addonModule('OrbitControls'),
+      'three/addons/controls/TransformControls.js': addonModule('TransformControls'),
+      'three/addons/loaders/PLYLoader.js': addonModule('PLYLoader'),
+      'three/addons/loaders/DRACOLoader.js': addonModule('DRACOLoader'),
+      'three/addons/loaders/GLTFLoader.js': addonModule('GLTFLoader')
     },
     getFile(url) {
-      return fetch(url).then(response => response.text());
+      return fetch(url).then((response) => {
+        if (!response.ok) {
+          throw new Error(`无法加载文件: ${url} (HTTP ${response.status})`);
+        }
+        return response.text();
+      });
     },
     addStyle(textContent) {
       const style = document.createElement('style');
